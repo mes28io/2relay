@@ -1,0 +1,48 @@
+name: 2relay
+options:
+  minimumXcodeGenVersion: 2.38.0
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: 5.10
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+    MACOSX_DEPLOYMENT_TARGET: 13.0
+    PRODUCT_BUNDLE_IDENTIFIER: dev.tworelay.app
+    PRODUCT_NAME: 2relay
+    INFOPLIST_FILE: Config/Info.plist
+    CODE_SIGN_ENTITLEMENTS: Config/2relay.entitlements
+    GENERATE_INFOPLIST_FILE: NO
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: LQBF8BWJ3U
+    ENABLE_HARDENED_RUNTIME: YES
+    SKIP_INSTALL: NO
+  configs:
+    Release:
+      CODE_SIGN_STYLE: Manual
+      CODE_SIGN_IDENTITY: Developer ID Application
+      PROVISIONING_PROFILE_SPECIFIER: ""
+packages:
+  TwoRelayLocal:
+    path: ../
+targets:
+  2relay:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+    dependencies:
+      - package: TwoRelayLocal
+        product: TwoRelayCore
+    settings:
+      base:
+        PRODUCT_MODULE_NAME: TwoRelayWrapper
+schemes:
+  2relay:
+    shared: true
+    build:
+      targets:
+        2relay: all
+    archive:
+      config: Release

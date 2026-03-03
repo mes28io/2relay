@@ -1,0 +1,11 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+dist/
+*.xcarchive
+*.xcresult
+*.dmg
+*.zip
+sparkle_private_key
+.sparkle_private_key

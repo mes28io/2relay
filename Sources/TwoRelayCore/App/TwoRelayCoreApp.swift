@@ -1,0 +1,199 @@
+import AppKit
+import SwiftUI
+
+public struct TwoRelayCoreApp: App {
+    @StateObject private var state: AppState
+    @StateObject private var permissionCenter: PermissionCenter
+    @StateObject private var misspellingDictionary: MisspellingDictionary
+    @StateObject private var mainWindowController: MainWindowController
+    @StateObject private var updaterController: UpdaterController
+    @StateObject private var overlayController: OverlayController
+    @StateObject private var hotkeyManager: HotkeyManager
+    private let listeningAudioCoordinator: ListeningAudioCoordinator
+    private let whisperTestFlowCoordinator: WhisperTestFlowCoordinator
+    private let whisperEngine: WhisperEngine
+
+    public init() {
+        let state = AppState()
+        _state = StateObject(wrappedValue: state)
+        let permissionCenter = PermissionCenter()
+        _permissionCenter = StateObject(wrappedValue: permissionCenter)
+
+        let misspellingDictionary = MisspellingDictionary()
+        _misspellingDictionary = StateObject(wrappedValue: misspellingDictionary)
+        let mainWindowController = MainWindowController()
+        _mainWindowController = StateObject(wrappedValue: mainWindowController)
+        let updaterController = UpdaterController()
+        _updaterController = StateObject(wrappedValue: updaterController)
+        let updateCheckAction = {
+            if updaterController.canCheckForUpdates {
+                updaterController.checkForUpdates()
+            } else {
+                state.reportStatus(
+                    updaterController.configurationErrorMessage ?? "Updates are currently unavailable.",
+                    level: .warning
+                )
+            }
+        }
+
+        let targetDispatcher = TargetDispatcher(permissionCenter: permissionCenter)
+        let whisperEngine = WhisperEngine(modelPath: state.modelPath)
+        self.whisperEngine = whisperEngine
+        let listeningAudioCoordinator = ListeningAudioCoordinator(
+            appState: state,
+            permissionCenter: permissionCenter,
+            misspellingDictionary: misspellingDictionary,
+            whisperEngine: whisperEngine,
+            targetDispatcher: targetDispatcher
+        )
+        self.listeningAudioCoordinator = listeningAudioCoordinator
+        _overlayController = StateObject(
+            wrappedValue: OverlayController(
+                state: state,
+                onSend: {
+                    listeningAudioCoordinator.sendReadyPromptToTarget()
+                },
+                onCopy: {
+                    listeningAudioCoordinator.copyReadyPromptToClipboard()
+                },
+                onCancel: {
+                    listeningAudioCoordinator.cancelReadyPrompt()
+                }
+            )
+        )
+        _hotkeyManager = StateObject(wrappedValue: HotkeyManager(appState: state))
+        let whisperTestFlowCoordinator = WhisperTestFlowCoordinator(
+            appState: state,
+            misspellingDictionary: misspellingDictionary,
+            whisperEngine: whisperEngine
+        )
+        self.whisperTestFlowCoordinator = whisperTestFlowCoordinator
+
+        DispatchQueue.main.async {
+            AppBranding.applyDockIcon()
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            Task { @MainActor in
+                mainWindowController.present(
+                    state: state,
+                    permissionCenter: permissionCenter,
+                    misspellingDictionary: misspellingDictionary,
+                    onRunWhisperTestFlow: {
+                        whisperTestFlowCoordinator.runRecordThreeSecondsThenTranslateToEnglish()
+                    },
+                    onOpenSettings: {
+                        permissionCenter.refreshFromSystemAndRedirectUnrecognizedIfNeeded()
+                        state.isSettingsPanelPresented = true
+                    },
+                    onOpenHelp: {
+                        Self.openHelpProfile()
+                    },
+                    canCheckForUpdates: updaterController.canCheckForUpdates,
+                    updatesDisabledReason: updaterController.configurationErrorMessage,
+                    onCheckForUpdates: updateCheckAction
+                )
+
+                guard state.launchTargetOnStartupEnabled else {
+                    return
+                }
+                guard state.defaultTarget != .clipboard else {
+                    return
+                }
+
+                do {
+                    try targetDispatcher.ensureTargetIsRunning(
+                        state.defaultTarget,
+                        activate: false,
+                        claudeCodeMode: state.claudeCodeMode
+                    )
+                    print("[2relay] startup: launched \(state.defaultTarget.displayName) in background")
+                } catch {
+                    print("[2relay] startup: failed to open \(state.defaultTarget.displayName): \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    public var body: some Scene {
+        // Ensure side-effect coordinators are initialized for hotkey and overlay behavior.
+        let _ = hotkeyManager
+        let _ = overlayController
+
+        MenuBarExtra("2relay", systemImage: "waveform") {
+            MenuBarView(
+                state: state,
+                canCheckForUpdates: updaterController.canCheckForUpdates,
+                onOpenMain: {
+                    mainWindowController.present(
+                        state: state,
+                        permissionCenter: permissionCenter,
+                        misspellingDictionary: misspellingDictionary,
+                        onRunWhisperTestFlow: {
+                            whisperTestFlowCoordinator.runRecordThreeSecondsThenTranslateToEnglish()
+                        },
+                        onOpenSettings: {
+                            permissionCenter.refreshFromSystemAndRedirectUnrecognizedIfNeeded()
+                            state.isSettingsPanelPresented = true
+                        },
+                        onOpenHelp: {
+                            Self.openHelpProfile()
+                        },
+                        canCheckForUpdates: updaterController.canCheckForUpdates,
+                        updatesDisabledReason: updaterController.configurationErrorMessage,
+                        onCheckForUpdates: {
+                            handleCheckForUpdates()
+                        }
+                    )
+                },
+                onCheckForUpdates: {
+                    handleCheckForUpdates()
+                },
+                onOpenSettings: {
+                    permissionCenter.refreshFromSystemAndRedirectUnrecognizedIfNeeded()
+                    state.isSettingsPanelPresented = true
+                    mainWindowController.present(
+                        state: state,
+                        permissionCenter: permissionCenter,
+                        misspellingDictionary: misspellingDictionary,
+                        onRunWhisperTestFlow: {
+                            whisperTestFlowCoordinator.runRecordThreeSecondsThenTranslateToEnglish()
+                        },
+                        onOpenSettings: {
+                            permissionCenter.refreshFromSystemAndRedirectUnrecognizedIfNeeded()
+                            state.isSettingsPanelPresented = true
+                        },
+                        onOpenHelp: {
+                            Self.openHelpProfile()
+                        },
+                        canCheckForUpdates: updaterController.canCheckForUpdates,
+                        updatesDisabledReason: updaterController.configurationErrorMessage,
+                        onCheckForUpdates: {
+                            handleCheckForUpdates()
+                        }
+                    )
+                }
+            )
+        }
+        .menuBarExtraStyle(.menu)
+    }
+
+    private static func openHelpProfile() {
+        guard let url = URL(string: "https://x.com/mes28io") else {
+            return
+        }
+
+        NSWorkspace.shared.open(url)
+    }
+
+    private func handleCheckForUpdates() {
+        if updaterController.canCheckForUpdates {
+            updaterController.checkForUpdates()
+        } else {
+            state.reportStatus(
+                updaterController.configurationErrorMessage ?? "Updates are currently unavailable.",
+                level: .warning
+            )
+        }
+    }
+}
