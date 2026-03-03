@@ -17,6 +17,20 @@ require_cmd shasum
 require_cmd uname
 [[ -x "/usr/libexec/PlistBuddy" ]] || die "missing required tool: /usr/libexec/PlistBuddy"
 
+symbolic_hotkey_enabled() {
+  local key_id="$1"
+  local plist_path="${HOME}/Library/Preferences/com.apple.symbolichotkeys.plist"
+  [[ -f "${plist_path}" ]] || return 1
+
+  local enabled_value
+  enabled_value="$(
+    /usr/libexec/PlistBuddy -c "Print :AppleSymbolicHotKeys:${key_id}:enabled" "${plist_path}" 2>/dev/null \
+      || echo "0"
+  )"
+
+  [[ "${enabled_value}" == "1" || "${enabled_value}" == "true" ]]
+}
+
 [[ "$(uname -s)" == "Darwin" ]] || die "this installer only supports macOS."
 
 repo="${TWORELAY_REPO:-mes28io/2relay}"
@@ -89,16 +103,33 @@ ditto "${source_app}" "${dest_app}"
 xattr -dr com.apple.quarantine "${dest_app}" >/dev/null 2>&1 || true
 
 bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${dest_app}/Contents/Info.plist" 2>/dev/null || true)"
-hotkey_json='{"carbonKeyCode":49,"carbonModifiers":4096}'
+hotkey_json_control='{"carbonKeyCode":49,"carbonModifiers":4096}'
+hotkey_json_control_option='{"carbonKeyCode":49,"carbonModifiers":6144}'
+hotkey_json_control_shift='{"carbonKeyCode":49,"carbonModifiers":4608}'
+hotkey_json="${hotkey_json_control}"
+hotkey_label="Control + Space"
+
+if symbolic_hotkey_enabled 60; then
+  if symbolic_hotkey_enabled 61; then
+    hotkey_json="${hotkey_json_control_shift}"
+    hotkey_label="Control + Shift + Space"
+  else
+    hotkey_json="${hotkey_json_control_option}"
+    hotkey_label="Control + Option + Space"
+  fi
+fi
 
 if [[ -n "${bundle_id}" ]]; then
   if [[ "${TWORELAY_FORCE_DEFAULT_HOTKEY:-0}" == "1" ]]; then
-    defaults write "${bundle_id}" KeyboardShortcuts_relayListen -string "${hotkey_json}"
+    defaults write "${bundle_id}" KeyboardShortcuts_relayListen -string "${hotkey_json_control}"
     echo "[2relay] preset hotkey: Control + Space (forced)"
   else
     if ! defaults read "${bundle_id}" KeyboardShortcuts_relayListen >/dev/null 2>&1; then
       defaults write "${bundle_id}" KeyboardShortcuts_relayListen -string "${hotkey_json}"
-      echo "[2relay] preset hotkey: Control + Space"
+      echo "[2relay] preset hotkey: ${hotkey_label}"
+      if [[ "${hotkey_label}" != "Control + Space" ]]; then
+        echo "[2relay] note: macOS reserves Control + Space by default on this Mac."
+      fi
     fi
   fi
 fi
@@ -112,4 +143,4 @@ fi
 
 echo
 echo "done."
-echo "hotkey default is Control + Space."
+echo "hotkey default is ${hotkey_label}."

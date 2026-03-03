@@ -98,12 +98,16 @@ final class HotkeyManager: ObservableObject {
             return false
         }
 
-        let entry: [AnyHashable: Any]?
-        if let hotkeys = rawHotkeys as? [AnyHashable: Any] {
-            entry = hotkeys["\(id)"] as? [AnyHashable: Any]
-        } else {
-            entry = nil
+        guard let hotkeys = rawHotkeys as? [AnyHashable: Any] else {
+            return false
         }
+
+        let entry = hotkeys.first { key, _ in
+            if let numeric = key as? NSNumber {
+                return numeric.intValue == id
+            }
+            return Int(String(describing: key)) == id
+        }?.value as? [AnyHashable: Any]
 
         guard let entry else {
             return false
