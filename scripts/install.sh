@@ -96,4 +96,4 @@ fi
 
 echo
 echo "done."
-echo "hotkey default is Control + Option + Space."
+echo "hotkey default is Control + Space."

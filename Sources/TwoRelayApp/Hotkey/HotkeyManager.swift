@@ -3,10 +3,21 @@ import Foundation
 import KeyboardShortcuts
 
 enum RelayHotkeyDefaults {
-    static let preferred = KeyboardShortcuts.Shortcut(.space, modifiers: [.control, .option])
-    static let legacyControlSpace = KeyboardShortcuts.Shortcut(.space, modifiers: [.control])
+    static let preferred = KeyboardShortcuts.Shortcut(.space, modifiers: [.control])
+    static let fallbackControlOption = KeyboardShortcuts.Shortcut(.space, modifiers: [.control, .option])
+    static let fallbackControlShift = KeyboardShortcuts.Shortcut(.space, modifiers: [.control, .shift])
+
     static let legacyFunction = KeyboardShortcuts.Shortcut(.space, modifiers: [.function])
     static let legacyOption = KeyboardShortcuts.Shortcut(.space, modifiers: [.option])
+
+    static var migratableShortcuts: [KeyboardShortcuts.Shortcut] {
+        [
+            fallbackControlOption,
+            fallbackControlShift,
+            legacyFunction,
+            legacyOption
+        ]
+    }
 }
 
 extension KeyboardShortcuts.Name {
@@ -26,6 +37,7 @@ final class HotkeyManager: ObservableObject {
     init(appState: AppState) {
         self.appState = appState
         migrateShortcutIfNeeded()
+        resolveSystemConflictsIfNeeded()
         bindModeChanges()
         registerCallbacks()
     }
@@ -33,12 +45,84 @@ final class HotkeyManager: ObservableObject {
     private func migrateShortcutIfNeeded() {
         let current = KeyboardShortcuts.getShortcut(for: .relayListen)
         if current == nil
-            || current == RelayHotkeyDefaults.legacyControlSpace
-            || current == RelayHotkeyDefaults.legacyFunction
-            || current == RelayHotkeyDefaults.legacyOption {
-            KeyboardShortcuts.setShortcut(RelayHotkeyDefaults.preferred, for: .relayListen)
-            appState.reportStatus("Hotkey migrated to Control + Option + Space to avoid macOS conflicts.", level: .info)
+            || RelayHotkeyDefaults.migratableShortcuts.contains(where: { $0 == current }) {
+            let preferred = recommendedDefaultShortcut()
+            KeyboardShortcuts.setShortcut(preferred, for: .relayListen)
+            appState.reportStatus("Hotkey default set to \(preferred.description).", level: .info)
         }
+    }
+
+    private func resolveSystemConflictsIfNeeded() {
+        guard let current = KeyboardShortcuts.getShortcut(for: .relayListen) else {
+            return
+        }
+
+        if current == RelayHotkeyDefaults.preferred, isSymbolicHotkeyEnabled(id: 60) {
+            let fallback = recommendedFallbackShortcut()
+            KeyboardShortcuts.setShortcut(fallback, for: .relayListen)
+            appState.reportStatus(
+                "Control + Space is reserved by macOS Input Sources. Switched to \(fallback.description). Disable the macOS shortcut in System Settings > Keyboard > Keyboard Shortcuts > Input Sources to keep Control + Space.",
+                level: .warning
+            )
+            return
+        }
+
+        if current == RelayHotkeyDefaults.fallbackControlOption, isSymbolicHotkeyEnabled(id: 61) {
+            let fallback = RelayHotkeyDefaults.fallbackControlShift
+            KeyboardShortcuts.setShortcut(fallback, for: .relayListen)
+            appState.reportStatus(
+                "Control + Option + Space is reserved by macOS Input Sources. Switched to \(fallback.description).",
+                level: .warning
+            )
+        }
+    }
+
+    private func recommendedDefaultShortcut() -> KeyboardShortcuts.Shortcut {
+        if isSymbolicHotkeyEnabled(id: 60) {
+            return recommendedFallbackShortcut()
+        }
+        return RelayHotkeyDefaults.preferred
+    }
+
+    private func recommendedFallbackShortcut() -> KeyboardShortcuts.Shortcut {
+        if !isSymbolicHotkeyEnabled(id: 61) {
+            return RelayHotkeyDefaults.fallbackControlOption
+        }
+        return RelayHotkeyDefaults.fallbackControlShift
+    }
+
+    private func isSymbolicHotkeyEnabled(id: Int) -> Bool {
+        guard let defaults = UserDefaults(suiteName: "com.apple.symbolichotkeys"),
+              let hotkeys = defaults.object(forKey: "AppleSymbolicHotKeys") as? [AnyHashable: Any] else {
+            return false
+        }
+
+        for (key, value) in hotkeys {
+            let keyID: Int?
+            if let numeric = key as? NSNumber {
+                keyID = numeric.intValue
+            } else {
+                keyID = Int(String(describing: key))
+            }
+
+            guard keyID == id else {
+                continue
+            }
+
+            guard let entry = value as? [AnyHashable: Any] else {
+                return false
+            }
+
+            if let enabled = entry["enabled"] as? Bool {
+                return enabled
+            }
+            if let enabled = entry["enabled"] as? NSNumber {
+                return enabled.boolValue
+            }
+            return false
+        }
+
+        return false
     }
 
     private func bindModeChanges() {

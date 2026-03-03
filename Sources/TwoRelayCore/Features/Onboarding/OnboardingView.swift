@@ -321,7 +321,7 @@ struct OnboardingView: View {
                         .foregroundStyle(mainTextColor)
                 }
 
-                Button("Continue with default (Control + Option + Space)") {
+                Button("Continue with default (Control + Space)") {
                     KeyboardShortcuts.setShortcut(RelayHotkeyDefaults.preferred, for: .relayListen)
                     hotkeyPreview = currentHotkeyDisplayText
                     state.reportStatus("Hotkey updated: \(hotkeyPreview)", level: .success)
