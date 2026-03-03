@@ -15,6 +15,7 @@ require_cmd curl
 require_cmd ditto
 require_cmd shasum
 require_cmd uname
+[[ -x "/usr/libexec/PlistBuddy" ]] || die "missing required tool: /usr/libexec/PlistBuddy"
 
 [[ "$(uname -s)" == "Darwin" ]] || die "this installer only supports macOS."
 
@@ -86,6 +87,21 @@ rm -rf "${dest_app}"
 ditto "${source_app}" "${dest_app}"
 
 xattr -dr com.apple.quarantine "${dest_app}" >/dev/null 2>&1 || true
+
+bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${dest_app}/Contents/Info.plist" 2>/dev/null || true)"
+hotkey_json='{"carbonKeyCode":49,"carbonModifiers":4096}'
+
+if [[ -n "${bundle_id}" ]]; then
+  if [[ "${TWORELAY_FORCE_DEFAULT_HOTKEY:-0}" == "1" ]]; then
+    defaults write "${bundle_id}" KeyboardShortcuts_relayListen -string "${hotkey_json}"
+    echo "[2relay] preset hotkey: Control + Space (forced)"
+  else
+    if ! defaults read "${bundle_id}" KeyboardShortcuts_relayListen >/dev/null 2>&1; then
+      defaults write "${bundle_id}" KeyboardShortcuts_relayListen -string "${hotkey_json}"
+      echo "[2relay] preset hotkey: Control + Space"
+    fi
+  fi
+fi
 
 echo "[2relay] installed: ${dest_app}"
 

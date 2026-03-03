@@ -71,7 +71,7 @@ final class HotkeyManager: ObservableObject {
             let fallback = RelayHotkeyDefaults.fallbackControlShift
             KeyboardShortcuts.setShortcut(fallback, for: .relayListen)
             appState.reportStatus(
-                "Control + Option + Space is reserved by macOS Input Sources. Switched to \(fallback.description).",
+                "Both Control + Space and Control + Option + Space are reserved by macOS. Switched to \(fallback.description).",
                 level: .warning
             )
         }
@@ -92,36 +92,29 @@ final class HotkeyManager: ObservableObject {
     }
 
     private func isSymbolicHotkeyEnabled(id: Int) -> Bool {
-        guard let defaults = UserDefaults(suiteName: "com.apple.symbolichotkeys"),
-              let hotkeys = defaults.object(forKey: "AppleSymbolicHotKeys") as? [AnyHashable: Any] else {
+        let hotkeysKey = "AppleSymbolicHotKeys" as CFString
+        let domain = "com.apple.symbolichotkeys" as CFString
+        guard let rawHotkeys = CFPreferencesCopyAppValue(hotkeysKey, domain) else {
             return false
         }
 
-        for (key, value) in hotkeys {
-            let keyID: Int?
-            if let numeric = key as? NSNumber {
-                keyID = numeric.intValue
-            } else {
-                keyID = Int(String(describing: key))
-            }
+        let entry: [AnyHashable: Any]?
+        if let hotkeys = rawHotkeys as? [AnyHashable: Any] {
+            entry = hotkeys["\(id)"] as? [AnyHashable: Any]
+        } else {
+            entry = nil
+        }
 
-            guard keyID == id else {
-                continue
-            }
-
-            guard let entry = value as? [AnyHashable: Any] else {
-                return false
-            }
-
-            if let enabled = entry["enabled"] as? Bool {
-                return enabled
-            }
-            if let enabled = entry["enabled"] as? NSNumber {
-                return enabled.boolValue
-            }
+        guard let entry else {
             return false
         }
 
+        if let enabled = entry["enabled"] as? Bool {
+            return enabled
+        }
+        if let enabled = entry["enabled"] as? NSNumber {
+            return enabled.boolValue
+        }
         return false
     }
 
