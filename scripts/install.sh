@@ -31,6 +31,13 @@ symbolic_hotkey_enabled() {
   [[ "${enabled_value}" == "1" || "${enabled_value}" == "true" ]]
 }
 
+disable_symbolic_hotkey() {
+  local key_id="$1"
+  local plist_path="${HOME}/Library/Preferences/com.apple.symbolichotkeys.plist"
+  [[ -f "${plist_path}" ]] || return 1
+  /usr/libexec/PlistBuddy -c "Set :AppleSymbolicHotKeys:${key_id}:enabled 0" "${plist_path}" >/dev/null 2>&1
+}
+
 [[ "$(uname -s)" == "Darwin" ]] || die "this installer only supports macOS."
 
 repo="${TWORELAY_REPO:-mes28io/2relay}"
@@ -109,7 +116,20 @@ hotkey_json_control_shift='{"carbonKeyCode":49,"carbonModifiers":4608}'
 hotkey_json="${hotkey_json_control}"
 hotkey_label="Control + Space"
 
-if symbolic_hotkey_enabled 60; then
+if [[ "${TWORELAY_DISABLE_INPUT_SOURCE_SHORTCUTS:-1}" == "1" ]]; then
+  disabled_any=0
+  if symbolic_hotkey_enabled 60; then
+    disable_symbolic_hotkey 60 && disabled_any=1
+  fi
+  if symbolic_hotkey_enabled 61; then
+    disable_symbolic_hotkey 61 && disabled_any=1
+  fi
+
+  if [[ "${disabled_any}" == "1" ]]; then
+    killall cfprefsd >/dev/null 2>&1 || true
+    echo "[2relay] disabled macOS Input Source shortcuts to free Control + Space"
+  fi
+elif symbolic_hotkey_enabled 60; then
   if symbolic_hotkey_enabled 61; then
     hotkey_json="${hotkey_json_control_shift}"
     hotkey_label="Control + Shift + Space"
