@@ -63,6 +63,16 @@ else
   download_url="https://github.com/${repo}/releases/download/${version}/${asset_name}"
 fi
 checksum_url="${download_url}.sha256"
+download_request_url="${download_url}"
+checksum_request_url="${checksum_url}"
+
+if [[ "${version}" == "latest" ]]; then
+  # GitHub CDN can briefly cache an older "latest" asset URL.
+  # Add a cache-busting query to ensure fresh binaries are fetched.
+  cache_buster="$(date +%s)"
+  download_request_url="${download_url}?t=${cache_buster}"
+  checksum_request_url="${checksum_url}?t=${cache_buster}"
+fi
 
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/2relay-install.XXXXXX")"
 cleanup() {
@@ -78,9 +88,9 @@ dest_app="${install_dir}/2relay.app"
 mkdir -p "${unpack_dir}"
 
 echo "[2relay] downloading ${download_url}"
-curl --fail --location --retry 3 --retry-delay 1 --connect-timeout 15 --progress-bar "${download_url}" -o "${zip_path}"
+curl --fail --location --retry 3 --retry-delay 1 --connect-timeout 15 --progress-bar "${download_request_url}" -o "${zip_path}"
 
-if curl --fail --location --retry 2 --connect-timeout 15 --silent --show-error "${checksum_url}" -o "${checksum_path}"; then
+if curl --fail --location --retry 2 --connect-timeout 15 --silent --show-error "${checksum_request_url}" -o "${checksum_path}"; then
   (
     cd "${tmp_dir}"
     shasum -a 256 -c "$(basename "${checksum_path}")"
