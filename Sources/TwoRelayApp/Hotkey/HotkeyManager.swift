@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import Combine
 import Foundation
 import KeyboardShortcuts
@@ -18,6 +19,13 @@ enum RelayHotkeyDefaults {
             legacyOption
         ]
     }
+
+    static var fallbackCandidates: [KeyboardShortcuts.Shortcut] {
+        [
+            fallbackControlOption,
+            fallbackControlShift
+        ]
+    }
 }
 
 extension KeyboardShortcuts.Name {
@@ -27,99 +35,228 @@ extension KeyboardShortcuts.Name {
     )
 }
 
+private final class CarbonHotkeyMonitor {
+    private static let signature: OSType = 0x32524C59 // "2RLY"
+    private static let identifier: UInt32 = 1
+
+    private let onKeyDown: @MainActor () -> Void
+    private let onKeyUp: @MainActor () -> Void
+
+    private var eventHandlerRef: EventHandlerRef?
+    private var hotKeyRef: EventHotKeyRef?
+
+    init(
+        onKeyDown: @escaping @MainActor () -> Void,
+        onKeyUp: @escaping @MainActor () -> Void
+    ) {
+        self.onKeyDown = onKeyDown
+        self.onKeyUp = onKeyUp
+        installEventHandlerIfNeeded()
+    }
+
+    deinit {
+        unregister()
+        removeEventHandler()
+    }
+
+    @discardableResult
+    func register(shortcut: KeyboardShortcuts.Shortcut) -> OSStatus {
+        unregister()
+
+        let hotKeyID = EventHotKeyID(signature: Self.signature, id: Self.identifier)
+        var newHotKeyRef: EventHotKeyRef?
+        let status = RegisterEventHotKey(
+            UInt32(shortcut.carbonKeyCode),
+            UInt32(shortcut.carbonModifiers),
+            hotKeyID,
+            GetEventDispatcherTarget(),
+            0,
+            &newHotKeyRef
+        )
+
+        if status == noErr {
+            hotKeyRef = newHotKeyRef
+        }
+
+        return status
+    }
+
+    func unregister() {
+        guard let hotKeyRef else {
+            return
+        }
+
+        UnregisterEventHotKey(hotKeyRef)
+        self.hotKeyRef = nil
+    }
+
+    private func installEventHandlerIfNeeded() {
+        guard eventHandlerRef == nil else {
+            return
+        }
+
+        var eventTypes = [
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased))
+        ]
+
+        let status = InstallEventHandler(
+            GetEventDispatcherTarget(),
+            Self.eventHandler,
+            eventTypes.count,
+            &eventTypes,
+            Unmanaged.passUnretained(self).toOpaque(),
+            &eventHandlerRef
+        )
+
+        if status != noErr {
+            print("[2relay] failed to install Carbon hotkey handler: \(status)")
+        }
+    }
+
+    private func removeEventHandler() {
+        guard let eventHandlerRef else {
+            return
+        }
+
+        RemoveEventHandler(eventHandlerRef)
+        self.eventHandlerRef = nil
+    }
+
+    private static let eventHandler: EventHandlerUPP = { _, eventRef, userData in
+        guard let eventRef, let userData else {
+            return OSStatus(eventNotHandledErr)
+        }
+
+        let monitor = Unmanaged<CarbonHotkeyMonitor>.fromOpaque(userData).takeUnretainedValue()
+        return monitor.handleEvent(eventRef)
+    }
+
+    private func handleEvent(_ eventRef: EventRef) -> OSStatus {
+        var hotKeyID = EventHotKeyID()
+        let readStatus = GetEventParameter(
+            eventRef,
+            EventParamName(kEventParamDirectObject),
+            EventParamType(typeEventHotKeyID),
+            nil,
+            MemoryLayout<EventHotKeyID>.size,
+            nil,
+            &hotKeyID
+        )
+
+        guard readStatus == noErr else {
+            return readStatus
+        }
+
+        guard hotKeyID.signature == Self.signature, hotKeyID.id == Self.identifier else {
+            return OSStatus(eventNotHandledErr)
+        }
+
+        let eventKind = GetEventKind(eventRef)
+        if eventKind == UInt32(kEventHotKeyPressed) {
+            Task { @MainActor in
+                onKeyDown()
+            }
+            return noErr
+        }
+
+        if eventKind == UInt32(kEventHotKeyReleased) {
+            Task { @MainActor in
+                onKeyUp()
+            }
+            return noErr
+        }
+
+        return OSStatus(eventNotHandledErr)
+    }
+}
+
 @MainActor
 final class HotkeyManager: ObservableObject {
+    private enum RegistrationReason {
+        case startup
+        case preferencesChange
+    }
+
     private let appState: AppState
+    private var hotkeyMonitor: CarbonHotkeyMonitor!
     private var keyIsHeld = false
     private var toggleListening = false
+    private var lastRegisteredShortcut: KeyboardShortcuts.Shortcut?
     private var cancellables = Set<AnyCancellable>()
 
     init(appState: AppState) {
         self.appState = appState
+        hotkeyMonitor = CarbonHotkeyMonitor(
+            onKeyDown: { [weak self] in
+                self?.handleKeyDown()
+            },
+            onKeyUp: { [weak self] in
+                self?.handleKeyUp()
+            }
+        )
+
         migrateShortcutIfNeeded()
-        resolveSystemConflictsIfNeeded()
+        registerCurrentShortcut(reason: .startup)
         bindModeChanges()
-        registerCallbacks()
+        bindShortcutChanges()
     }
 
     private func migrateShortcutIfNeeded() {
         let current = KeyboardShortcuts.getShortcut(for: .relayListen)
         if current == nil
             || RelayHotkeyDefaults.migratableShortcuts.contains(where: { $0 == current }) {
-            let preferred = recommendedDefaultShortcut()
-            KeyboardShortcuts.setShortcut(preferred, for: .relayListen)
-            appState.reportStatus("Hotkey default set to \(preferred.description).", level: .info)
+            KeyboardShortcuts.setShortcut(RelayHotkeyDefaults.preferred, for: .relayListen)
+            appState.reportStatus("Hotkey default set to \(RelayHotkeyDefaults.preferred.description).", level: .info)
         }
     }
 
-    private func resolveSystemConflictsIfNeeded() {
-        guard let current = KeyboardShortcuts.getShortcut(for: .relayListen) else {
+    private func registerCurrentShortcut(reason: RegistrationReason) {
+        let selectedShortcut = KeyboardShortcuts.getShortcut(for: .relayListen) ?? RelayHotkeyDefaults.preferred
+        if KeyboardShortcuts.getShortcut(for: .relayListen) == nil {
+            KeyboardShortcuts.setShortcut(selectedShortcut, for: .relayListen)
+        }
+
+        if selectedShortcut == lastRegisteredShortcut, reason != .startup {
             return
         }
 
-        if current == RelayHotkeyDefaults.preferred, isSymbolicHotkeyEnabled(id: 60) {
-            let fallback = recommendedFallbackShortcut()
-            KeyboardShortcuts.setShortcut(fallback, for: .relayListen)
-            appState.reportStatus(
-                "Control + Space is reserved by macOS Input Sources. Switched to \(fallback.description). Disable the macOS shortcut in System Settings > Keyboard > Keyboard Shortcuts > Input Sources to keep Control + Space.",
-                level: .warning
-            )
-            return
-        }
-
-        if current == RelayHotkeyDefaults.fallbackControlOption, isSymbolicHotkeyEnabled(id: 61) {
-            let fallback = RelayHotkeyDefaults.fallbackControlShift
-            KeyboardShortcuts.setShortcut(fallback, for: .relayListen)
-            appState.reportStatus(
-                "Both Control + Space and Control + Option + Space are reserved by macOS. Switched to \(fallback.description).",
-                level: .warning
-            )
-        }
-    }
-
-    private func recommendedDefaultShortcut() -> KeyboardShortcuts.Shortcut {
-        if isSymbolicHotkeyEnabled(id: 60) {
-            return recommendedFallbackShortcut()
-        }
-        return RelayHotkeyDefaults.preferred
-    }
-
-    private func recommendedFallbackShortcut() -> KeyboardShortcuts.Shortcut {
-        if !isSymbolicHotkeyEnabled(id: 61) {
-            return RelayHotkeyDefaults.fallbackControlOption
-        }
-        return RelayHotkeyDefaults.fallbackControlShift
-    }
-
-    private func isSymbolicHotkeyEnabled(id: Int) -> Bool {
-        let hotkeysKey = "AppleSymbolicHotKeys" as CFString
-        let domain = "com.apple.symbolichotkeys" as CFString
-        guard let rawHotkeys = CFPreferencesCopyAppValue(hotkeysKey, domain) else {
-            return false
-        }
-
-        guard let hotkeys = rawHotkeys as? [AnyHashable: Any] else {
-            return false
-        }
-
-        let entry = hotkeys.first { key, _ in
-            if let numeric = key as? NSNumber {
-                return numeric.intValue == id
+        let status = hotkeyMonitor.register(shortcut: selectedShortcut)
+        if status == noErr {
+            lastRegisteredShortcut = selectedShortcut
+            if reason == .preferencesChange {
+                appState.reportStatus("Hotkey updated: \(selectedShortcut.description)", level: .success)
             }
-            return Int(String(describing: key)) == id
-        }?.value as? [AnyHashable: Any]
-
-        guard let entry else {
-            return false
+            return
         }
 
-        if let enabled = entry["enabled"] as? Bool {
-            return enabled
+        for fallback in RelayHotkeyDefaults.fallbackCandidates where fallback != selectedShortcut {
+            let fallbackStatus = hotkeyMonitor.register(shortcut: fallback)
+            if fallbackStatus == noErr {
+                KeyboardShortcuts.setShortcut(fallback, for: .relayListen)
+                lastRegisteredShortcut = fallback
+                appState.reportStatus(
+                    "Hotkey \(selectedShortcut.description) is unavailable on this Mac. Switched to \(fallback.description).",
+                    level: .warning
+                )
+                return
+            }
         }
-        if let enabled = entry["enabled"] as? NSNumber {
-            return enabled.boolValue
-        }
-        return false
+
+        hotkeyMonitor.unregister()
+        appState.reportStatus(
+            "Could not register a global hotkey. Choose another shortcut in Settings > Shortcuts.",
+            level: .error
+        )
+    }
+
+    private func bindShortcutChanges() {
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification, object: UserDefaults.standard)
+            .debounce(for: .milliseconds(120), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.registerCurrentShortcut(reason: .preferencesChange)
+            }
+            .store(in: &cancellables)
     }
 
     private func bindModeChanges() {
@@ -135,20 +272,6 @@ final class HotkeyManager: ObservableObject {
         if appState.hotkeyMode == .pushToTalk && toggleListening {
             toggleListening = false
             appState.stopListening()
-        }
-    }
-
-    private func registerCallbacks() {
-        KeyboardShortcuts.onKeyDown(for: .relayListen) { [weak self] in
-            Task { @MainActor in
-                self?.handleKeyDown()
-            }
-        }
-
-        KeyboardShortcuts.onKeyUp(for: .relayListen) { [weak self] in
-            Task { @MainActor in
-                self?.handleKeyUp()
-            }
         }
     }
 
