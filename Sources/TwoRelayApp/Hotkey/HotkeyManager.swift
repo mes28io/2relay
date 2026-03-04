@@ -11,6 +11,8 @@ enum RelayHotkeyDefaults {
     static let preferred = KeyboardShortcuts.Shortcut(.space, modifiers: [.control])
     static let fallbackControlOption = KeyboardShortcuts.Shortcut(.space, modifiers: [.control, .option])
     static let fallbackControlShift = KeyboardShortcuts.Shortcut(.space, modifiers: [.control, .shift])
+    static let fallbackCommandOption = KeyboardShortcuts.Shortcut(.space, modifiers: [.command, .option])
+    static let fallbackCommandShift = KeyboardShortcuts.Shortcut(.space, modifiers: [.command, .shift])
 
     static let legacyFunction = KeyboardShortcuts.Shortcut(.space, modifiers: [.function])
     static let legacyOption = KeyboardShortcuts.Shortcut(.space, modifiers: [.option])
@@ -19,6 +21,8 @@ enum RelayHotkeyDefaults {
         [
             fallbackControlOption,
             fallbackControlShift,
+            fallbackCommandOption,
+            fallbackCommandShift,
             legacyFunction,
             legacyOption
         ]
@@ -27,7 +31,9 @@ enum RelayHotkeyDefaults {
     static var fallbackCandidates: [KeyboardShortcuts.Shortcut] {
         [
             fallbackControlOption,
-            fallbackControlShift
+            fallbackControlShift,
+            fallbackCommandOption,
+            fallbackCommandShift
         ]
     }
 }
@@ -224,6 +230,93 @@ private final class CarbonHotkeyMonitor {
     }
 }
 
+private final class KeyEventFallbackMonitor {
+    private let instanceID = UUID().uuidString.prefix(8)
+    private let onKeyDown: @MainActor () -> Void
+    private let onKeyUp: @MainActor () -> Void
+    private var localMonitor: Any?
+    private var globalMonitor: Any?
+    private var trackedShortcut: KeyboardShortcuts.Shortcut?
+    private var isActive = false
+
+    init(
+        onKeyDown: @escaping @MainActor () -> Void,
+        onKeyUp: @escaping @MainActor () -> Void
+    ) {
+        self.onKeyDown = onKeyDown
+        self.onKeyUp = onKeyUp
+        print("[2relay] key event fallback monitor init: \(instanceID)")
+    }
+
+    deinit {
+        print("[2relay] key event fallback monitor deinit: \(instanceID)")
+        stop()
+    }
+
+    func start(shortcut: KeyboardShortcuts.Shortcut) {
+        trackedShortcut = shortcut
+        guard !isActive else {
+            return
+        }
+
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            self?.handle(event)
+        }
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            self?.handle(event)
+            return event
+        }
+        isActive = true
+        print("[2relay] key event fallback monitor enabled (\(instanceID))")
+    }
+
+    func stop() {
+        if let localMonitor {
+            NSEvent.removeMonitor(localMonitor)
+            self.localMonitor = nil
+        }
+
+        if let globalMonitor {
+            NSEvent.removeMonitor(globalMonitor)
+            self.globalMonitor = nil
+        }
+
+        if isActive {
+            print("[2relay] key event fallback monitor disabled (\(instanceID))")
+        }
+
+        trackedShortcut = nil
+        isActive = false
+    }
+
+    private func handle(_ event: NSEvent) {
+        guard let trackedShortcut else {
+            return
+        }
+
+        guard let eventShortcut = KeyboardShortcuts.Shortcut(event: event) else {
+            return
+        }
+
+        guard eventShortcut == trackedShortcut else {
+            return
+        }
+
+        switch event.type {
+        case .keyDown:
+            Task { @MainActor in
+                onKeyDown()
+            }
+        case .keyUp:
+            Task { @MainActor in
+                onKeyUp()
+            }
+        default:
+            return
+        }
+    }
+}
+
 @MainActor
 final class HotkeyManager: ObservableObject {
     private enum RegistrationReason {
@@ -233,7 +326,9 @@ final class HotkeyManager: ObservableObject {
     }
 
     private let appState: AppState
+    private let instanceID = UUID().uuidString.prefix(8)
     private var hotkeyMonitor: CarbonHotkeyMonitor!
+    private var keyEventFallbackMonitor: KeyEventFallbackMonitor!
     private var keyIsHeld = false
     private var toggleListening = false
     private var lastRegisteredShortcut: KeyboardShortcuts.Shortcut?
@@ -241,7 +336,16 @@ final class HotkeyManager: ObservableObject {
 
     init(appState: AppState) {
         self.appState = appState
+        print("[2relay] hotkey manager init: \(instanceID)")
         hotkeyMonitor = CarbonHotkeyMonitor(
+            onKeyDown: { [weak self] in
+                self?.handleKeyDown()
+            },
+            onKeyUp: { [weak self] in
+                self?.handleKeyUp()
+            }
+        )
+        keyEventFallbackMonitor = KeyEventFallbackMonitor(
             onKeyDown: { [weak self] in
                 self?.handleKeyDown()
             },
@@ -255,6 +359,10 @@ final class HotkeyManager: ObservableObject {
         bindModeChanges()
         bindShortcutChanges()
         bindLifecycleChanges()
+    }
+
+    deinit {
+        print("[2relay] hotkey manager deinit: \(instanceID)")
     }
 
     private func migrateShortcutIfNeeded() {
@@ -293,6 +401,8 @@ final class HotkeyManager: ObservableObject {
             return
         }
 
+        keyEventFallbackMonitor.start(shortcut: selectedShortcut)
+
         let status = hotkeyMonitor.register(shortcut: selectedShortcut)
         if status == noErr {
             lastRegisteredShortcut = selectedShortcut
@@ -315,6 +425,7 @@ final class HotkeyManager: ObservableObject {
             if fallbackStatus == noErr {
                 KeyboardShortcuts.setShortcut(fallback, for: .relayListen)
                 lastRegisteredShortcut = fallback
+                keyEventFallbackMonitor.start(shortcut: fallback)
                 print("[2relay] hotkey fallback registered (\(hotkeyMonitor.activeTargetLabel)): \(fallback.description)")
                 appState.reportStatus(
                     "Hotkey \(selectedShortcut.description) is unavailable on this Mac. Switched to \(fallback.description).",
@@ -400,6 +511,10 @@ final class HotkeyManager: ObservableObject {
     }
 
     private func handleKeyUp() {
+        guard keyIsHeld else {
+            return
+        }
+
         defer {
             keyIsHeld = false
         }
@@ -430,6 +545,10 @@ final class HotkeyManager: ObservableObject {
     }
 
     private func hotkeyConflictsWithSystemShortcut(_ shortcut: KeyboardShortcuts.Shortcut) -> Bool {
+        if symbolicSystemShortcuts().contains(shortcut) {
+            return true
+        }
+
         if shortcut == RelayHotkeyDefaults.preferred {
             return symbolicHotkeyEnabled(RelayHotkeyDefaults.systemInputSourceControlSpaceID)
         }
@@ -439,6 +558,27 @@ final class HotkeyManager: ObservableObject {
         }
 
         return false
+    }
+
+    private func symbolicSystemShortcuts() -> [KeyboardShortcuts.Shortcut] {
+        var shortcutsUnmanaged: Unmanaged<CFArray>?
+        guard CopySymbolicHotKeys(&shortcutsUnmanaged) == noErr,
+              let shortcuts = shortcutsUnmanaged?.takeRetainedValue() as? [[String: Any]] else {
+            return []
+        }
+
+        return shortcuts.compactMap { shortcutInfo in
+            guard (shortcutInfo[kHISymbolicHotKeyEnabled] as? Bool) == true,
+                  let keyCode = shortcutInfo[kHISymbolicHotKeyCode] as? Int,
+                  let modifiers = shortcutInfo[kHISymbolicHotKeyModifiers] as? Int else {
+                return nil
+            }
+
+            return KeyboardShortcuts.Shortcut(
+                carbonKeyCode: keyCode,
+                carbonModifiers: modifiers
+            )
+        }
     }
 
     private func symbolicHotkeyEnabled(_ keyID: Int) -> Bool {

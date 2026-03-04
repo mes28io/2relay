@@ -1,7 +1,21 @@
 import AppKit
 import SwiftUI
 
-public struct TwoRelayCoreApp: App {
+@MainActor
+private enum RuntimeRetainer {
+    static var state: AppState?
+    static var permissionCenter: PermissionCenter?
+    static var misspellingDictionary: MisspellingDictionary?
+    static var mainWindowController: MainWindowController?
+    static var updaterController: UpdaterController?
+    static var overlayController: OverlayController?
+    static var hotkeyManager: HotkeyManager?
+    static var listeningAudioCoordinator: ListeningAudioCoordinator?
+    static var whisperTestFlowCoordinator: WhisperTestFlowCoordinator?
+    static var whisperEngine: WhisperEngine?
+}
+
+public struct TwoRelayCoreScene: Scene {
     @StateObject private var state: AppState
     @StateObject private var permissionCenter: PermissionCenter
     @StateObject private var misspellingDictionary: MisspellingDictionary
@@ -16,15 +30,20 @@ public struct TwoRelayCoreApp: App {
     public init() {
         let state = AppState()
         _state = StateObject(wrappedValue: state)
+        RuntimeRetainer.state = state
         let permissionCenter = PermissionCenter()
         _permissionCenter = StateObject(wrappedValue: permissionCenter)
+        RuntimeRetainer.permissionCenter = permissionCenter
 
         let misspellingDictionary = MisspellingDictionary()
         _misspellingDictionary = StateObject(wrappedValue: misspellingDictionary)
+        RuntimeRetainer.misspellingDictionary = misspellingDictionary
         let mainWindowController = MainWindowController()
         _mainWindowController = StateObject(wrappedValue: mainWindowController)
+        RuntimeRetainer.mainWindowController = mainWindowController
         let updaterController = UpdaterController()
         _updaterController = StateObject(wrappedValue: updaterController)
+        RuntimeRetainer.updaterController = updaterController
         let updateCheckAction = {
             if updaterController.canCheckForUpdates {
                 updaterController.checkForUpdates()
@@ -39,6 +58,7 @@ public struct TwoRelayCoreApp: App {
         let targetDispatcher = TargetDispatcher(permissionCenter: permissionCenter)
         let whisperEngine = WhisperEngine(modelPath: state.modelPath)
         self.whisperEngine = whisperEngine
+        RuntimeRetainer.whisperEngine = whisperEngine
         let listeningAudioCoordinator = ListeningAudioCoordinator(
             appState: state,
             permissionCenter: permissionCenter,
@@ -47,27 +67,33 @@ public struct TwoRelayCoreApp: App {
             targetDispatcher: targetDispatcher
         )
         self.listeningAudioCoordinator = listeningAudioCoordinator
-        _overlayController = StateObject(
-            wrappedValue: OverlayController(
-                state: state,
-                onSend: {
-                    listeningAudioCoordinator.sendReadyPromptToTarget()
-                },
-                onCopy: {
-                    listeningAudioCoordinator.copyReadyPromptToClipboard()
-                },
-                onCancel: {
-                    listeningAudioCoordinator.cancelReadyPrompt()
-                }
-            )
+        RuntimeRetainer.listeningAudioCoordinator = listeningAudioCoordinator
+
+        let overlayController = OverlayController(
+            state: state,
+            onSend: {
+                listeningAudioCoordinator.sendReadyPromptToTarget()
+            },
+            onCopy: {
+                listeningAudioCoordinator.copyReadyPromptToClipboard()
+            },
+            onCancel: {
+                listeningAudioCoordinator.cancelReadyPrompt()
+            }
         )
-        _hotkeyManager = StateObject(wrappedValue: HotkeyManager(appState: state))
+        _overlayController = StateObject(wrappedValue: overlayController)
+        RuntimeRetainer.overlayController = overlayController
+
+        let hotkeyManager = HotkeyManager(appState: state)
+        _hotkeyManager = StateObject(wrappedValue: hotkeyManager)
+        RuntimeRetainer.hotkeyManager = hotkeyManager
         let whisperTestFlowCoordinator = WhisperTestFlowCoordinator(
             appState: state,
             misspellingDictionary: misspellingDictionary,
             whisperEngine: whisperEngine
         )
         self.whisperTestFlowCoordinator = whisperTestFlowCoordinator
+        RuntimeRetainer.whisperTestFlowCoordinator = whisperTestFlowCoordinator
 
         DispatchQueue.main.async {
             AppBranding.applyDockIcon()
@@ -195,5 +221,13 @@ public struct TwoRelayCoreApp: App {
                 level: .warning
             )
         }
+    }
+}
+
+public struct TwoRelayCoreApp: App {
+    public init() {}
+
+    public var body: some Scene {
+        TwoRelayCoreScene()
     }
 }
