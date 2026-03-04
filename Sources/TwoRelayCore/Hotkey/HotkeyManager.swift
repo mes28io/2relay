@@ -1,9 +1,13 @@
 import Carbon.HIToolbox
+import AppKit
 import Combine
 import Foundation
 import KeyboardShortcuts
 
 enum RelayHotkeyDefaults {
+    static let systemInputSourceControlSpaceID = 60
+    static let systemInputSourceControlOptionSpaceID = 61
+
     static let preferred = KeyboardShortcuts.Shortcut(.space, modifiers: [.control])
     static let fallbackControlOption = KeyboardShortcuts.Shortcut(.space, modifiers: [.control, .option])
     static let fallbackControlShift = KeyboardShortcuts.Shortcut(.space, modifiers: [.control, .shift])
@@ -36,6 +40,29 @@ extension KeyboardShortcuts.Name {
 }
 
 private final class CarbonHotkeyMonitor {
+    private enum RegistrationTarget: CaseIterable {
+        case application
+        case dispatcher
+
+        var label: String {
+            switch self {
+            case .application:
+                return "application"
+            case .dispatcher:
+                return "dispatcher"
+            }
+        }
+
+        var eventTarget: EventTargetRef? {
+            switch self {
+            case .application:
+                return GetApplicationEventTarget()
+            case .dispatcher:
+                return GetEventDispatcherTarget()
+            }
+        }
+    }
+
     private static let signature: OSType = 0x32524C59 // "2RLY"
     private static let identifier: UInt32 = 1
 
@@ -44,6 +71,11 @@ private final class CarbonHotkeyMonitor {
 
     private var eventHandlerRef: EventHandlerRef?
     private var hotKeyRef: EventHotKeyRef?
+    private var activeTarget: RegistrationTarget?
+
+    var activeTargetLabel: String {
+        activeTarget?.label ?? "none"
+    }
 
     init(
         onKeyDown: @escaping @MainActor () -> Void,
@@ -51,7 +83,6 @@ private final class CarbonHotkeyMonitor {
     ) {
         self.onKeyDown = onKeyDown
         self.onKeyUp = onKeyUp
-        installEventHandlerIfNeeded()
     }
 
     deinit {
@@ -62,23 +93,39 @@ private final class CarbonHotkeyMonitor {
     @discardableResult
     func register(shortcut: KeyboardShortcuts.Shortcut) -> OSStatus {
         unregister()
+        activeTarget = nil
+        var lastStatus = OSStatus(eventNotHandledErr)
 
-        let hotKeyID = EventHotKeyID(signature: Self.signature, id: Self.identifier)
-        var newHotKeyRef: EventHotKeyRef?
-        let status = RegisterEventHotKey(
-            UInt32(shortcut.carbonKeyCode),
-            UInt32(shortcut.carbonModifiers),
-            hotKeyID,
-            GetEventDispatcherTarget(),
-            0,
-            &newHotKeyRef
-        )
+        for target in RegistrationTarget.allCases {
+            let handlerStatus = installEventHandler(on: target)
+            guard handlerStatus == noErr else {
+                lastStatus = handlerStatus
+                print("[2relay] failed to install Carbon handler on \(target.label) target: \(handlerStatus)")
+                continue
+            }
 
-        if status == noErr {
-            hotKeyRef = newHotKeyRef
+            let hotKeyID = EventHotKeyID(signature: Self.signature, id: Self.identifier)
+            var newHotKeyRef: EventHotKeyRef?
+            let status = RegisterEventHotKey(
+                UInt32(shortcut.carbonKeyCode),
+                UInt32(shortcut.carbonModifiers),
+                hotKeyID,
+                target.eventTarget,
+                0,
+                &newHotKeyRef
+            )
+            lastStatus = status
+
+            if status == noErr {
+                hotKeyRef = newHotKeyRef
+                activeTarget = target
+                return status
+            }
+
+            print("[2relay] Carbon register failed on \(target.label) target: \(status)")
         }
 
-        return status
+        return lastStatus
     }
 
     func unregister() {
@@ -90,10 +137,12 @@ private final class CarbonHotkeyMonitor {
         self.hotKeyRef = nil
     }
 
-    private func installEventHandlerIfNeeded() {
-        guard eventHandlerRef == nil else {
-            return
+    private func installEventHandler(on target: RegistrationTarget) -> OSStatus {
+        if eventHandlerRef != nil, activeTarget == target {
+            return noErr
         }
+
+        removeEventHandler()
 
         var eventTypes = [
             EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
@@ -101,7 +150,7 @@ private final class CarbonHotkeyMonitor {
         ]
 
         let status = InstallEventHandler(
-            GetEventDispatcherTarget(),
+            target.eventTarget,
             Self.eventHandler,
             eventTypes.count,
             &eventTypes,
@@ -109,9 +158,13 @@ private final class CarbonHotkeyMonitor {
             &eventHandlerRef
         )
 
-        if status != noErr {
-            print("[2relay] failed to install Carbon hotkey handler: \(status)")
+        if status == noErr {
+            activeTarget = target
+        } else {
+            activeTarget = nil
         }
+
+        return status
     }
 
     private func removeEventHandler() {
@@ -176,6 +229,7 @@ final class HotkeyManager: ObservableObject {
     private enum RegistrationReason {
         case startup
         case preferencesChange
+        case lifecycleRecovery
     }
 
     private let appState: AppState
@@ -200,6 +254,7 @@ final class HotkeyManager: ObservableObject {
         registerCurrentShortcut(reason: .startup)
         bindModeChanges()
         bindShortcutChanges()
+        bindLifecycleChanges()
     }
 
     private func migrateShortcutIfNeeded() {
@@ -212,38 +267,67 @@ final class HotkeyManager: ObservableObject {
     }
 
     private func registerCurrentShortcut(reason: RegistrationReason) {
-        let selectedShortcut = KeyboardShortcuts.getShortcut(for: .relayListen) ?? RelayHotkeyDefaults.preferred
+        var selectedShortcut = KeyboardShortcuts.getShortcut(for: .relayListen) ?? RelayHotkeyDefaults.preferred
         if KeyboardShortcuts.getShortcut(for: .relayListen) == nil {
             KeyboardShortcuts.setShortcut(selectedShortcut, for: .relayListen)
         }
 
-        if selectedShortcut == lastRegisteredShortcut, reason != .startup {
+        if hotkeyConflictsWithSystemShortcut(selectedShortcut),
+           let nonConflictingFallback = RelayHotkeyDefaults.fallbackCandidates.first(where: {
+               $0 != selectedShortcut && !hotkeyConflictsWithSystemShortcut($0)
+           }) {
+            let conflictingShortcut = selectedShortcut
+            selectedShortcut = nonConflictingFallback
+            KeyboardShortcuts.setShortcut(selectedShortcut, for: .relayListen)
+            lastRegisteredShortcut = nil
+            print(
+                "[2relay] selected hotkey \(conflictingShortcut.description) conflicts with macOS input source shortcuts; switched to \(selectedShortcut.description)"
+            )
+            appState.reportStatus(
+                "Hotkey \(conflictingShortcut.description) conflicts with macOS input source shortcuts. Switched to \(selectedShortcut.description).",
+                level: .warning
+            )
+        }
+
+        if selectedShortcut == lastRegisteredShortcut, reason == .preferencesChange {
             return
         }
 
         let status = hotkeyMonitor.register(shortcut: selectedShortcut)
         if status == noErr {
             lastRegisteredShortcut = selectedShortcut
+            print("[2relay] hotkey registered (\(hotkeyMonitor.activeTargetLabel)): \(selectedShortcut.description)")
             if reason == .preferencesChange {
                 appState.reportStatus("Hotkey updated: \(selectedShortcut.description)", level: .success)
             }
             return
         }
 
+        print("[2relay] hotkey registration failed for \(selectedShortcut.description): \(status)")
+
         for fallback in RelayHotkeyDefaults.fallbackCandidates where fallback != selectedShortcut {
+            if hotkeyConflictsWithSystemShortcut(fallback) {
+                print("[2relay] skipping fallback \(fallback.description) due to macOS input source shortcut conflict")
+                continue
+            }
+
             let fallbackStatus = hotkeyMonitor.register(shortcut: fallback)
             if fallbackStatus == noErr {
                 KeyboardShortcuts.setShortcut(fallback, for: .relayListen)
                 lastRegisteredShortcut = fallback
+                print("[2relay] hotkey fallback registered (\(hotkeyMonitor.activeTargetLabel)): \(fallback.description)")
                 appState.reportStatus(
                     "Hotkey \(selectedShortcut.description) is unavailable on this Mac. Switched to \(fallback.description).",
                     level: .warning
                 )
                 return
             }
+
+            print("[2relay] hotkey fallback registration failed for \(fallback.description): \(fallbackStatus)")
         }
 
         hotkeyMonitor.unregister()
+        print("[2relay] no global hotkey could be registered")
         appState.reportStatus(
             "Could not register a global hotkey. Choose another shortcut in Settings > Shortcuts.",
             level: .error
@@ -255,6 +339,33 @@ final class HotkeyManager: ObservableObject {
             .debounce(for: .milliseconds(120), scheduler: RunLoop.main)
             .sink { [weak self] _ in
                 self?.registerCurrentShortcut(reason: .preferencesChange)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func bindLifecycleChanges() {
+        NotificationCenter.default.publisher(for: NSApplication.didFinishLaunchingNotification)
+            .merge(with: NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
+            .sink { [weak self] _ in
+                self?.registerCurrentShortcut(reason: .lifecycleRecovery)
+            }
+            .store(in: &cancellables)
+
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)
+            .sink { [weak self] _ in
+                self?.registerCurrentShortcut(reason: .lifecycleRecovery)
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)
+            .sink { [weak self] _ in
+                self?.releaseHeldHotkeyIfNeeded()
+            }
+            .store(in: &cancellables)
+
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.willSleepNotification)
+            .sink { [weak self] _ in
+                self?.releaseHeldHotkeyIfNeeded()
             }
             .store(in: &cancellables)
     }
@@ -281,6 +392,7 @@ final class HotkeyManager: ObservableObject {
         }
 
         keyIsHeld = true
+        print("[2relay] hotkey down")
 
         if appState.hotkeyMode == .pushToTalk {
             appState.startListening()
@@ -291,6 +403,7 @@ final class HotkeyManager: ObservableObject {
         defer {
             keyIsHeld = false
         }
+        print("[2relay] hotkey up")
 
         switch appState.hotkeyMode {
         case .pushToTalk:
@@ -303,5 +416,46 @@ final class HotkeyManager: ObservableObject {
             }
             toggleListening.toggle()
         }
+    }
+
+    private func releaseHeldHotkeyIfNeeded() {
+        guard keyIsHeld else {
+            return
+        }
+
+        keyIsHeld = false
+        if appState.isListening {
+            appState.stopListening()
+        }
+    }
+
+    private func hotkeyConflictsWithSystemShortcut(_ shortcut: KeyboardShortcuts.Shortcut) -> Bool {
+        if shortcut == RelayHotkeyDefaults.preferred {
+            return symbolicHotkeyEnabled(RelayHotkeyDefaults.systemInputSourceControlSpaceID)
+        }
+
+        if shortcut == RelayHotkeyDefaults.fallbackControlOption {
+            return symbolicHotkeyEnabled(RelayHotkeyDefaults.systemInputSourceControlOptionSpaceID)
+        }
+
+        return false
+    }
+
+    private func symbolicHotkeyEnabled(_ keyID: Int) -> Bool {
+        guard let defaults = UserDefaults(suiteName: "com.apple.symbolichotkeys"),
+              let hotkeys = defaults.dictionary(forKey: "AppleSymbolicHotKeys"),
+              let hotkey = hotkeys["\(keyID)"] as? [String: Any] else {
+            return false
+        }
+
+        if let enabled = hotkey["enabled"] as? Bool {
+            return enabled
+        }
+
+        if let enabled = hotkey["enabled"] as? NSNumber {
+            return enabled.boolValue
+        }
+
+        return false
     }
 }
