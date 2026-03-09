@@ -81,8 +81,7 @@ final class ListeningAudioCoordinator {
 
                     let finalPrompt: String
                     if appState.cleanPromptEnabled {
-                        let style = style(for: appState.defaultTarget)
-                        finalPrompt = promptCleaner.clean(rawText: correctedTranscript, style: style)
+                        finalPrompt = promptCleaner.clean(rawText: correctedTranscript, style: .codex)
                         print("[2relay] cleaned coding prompt:\n\(finalPrompt)")
                     } else {
                         finalPrompt = correctedTranscript
@@ -162,8 +161,7 @@ final class ListeningAudioCoordinator {
         do {
             try targetDispatcher.activateAndPaste(
                 text: prompt,
-                target: appState.defaultTarget,
-                claudeCodeMode: appState.claudeCodeMode
+                target: appState.defaultTarget
             )
             appState.reportStatus("Prompt sent to \(appState.defaultTarget.displayName).", level: .success)
             appState.setOverlayError(nil)
@@ -209,18 +207,6 @@ final class ListeningAudioCoordinator {
         appState.clearPendingPrompt()
         print("[2relay] prompt canceled")
     }
-
-    private func style(for target: TargetApp) -> PromptCleaner.Style {
-        switch target {
-        case .claudeCode:
-            return .claudeCode
-        case .codex:
-            return .codex
-        case .clipboard:
-            return .codex
-        }
-    }
-
     private func writePromptToClipboard(_ text: String) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()

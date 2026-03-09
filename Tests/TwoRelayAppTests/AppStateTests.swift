@@ -6,8 +6,7 @@ final class AppStateTests: XCTestCase {
     func testDefaults() {
         let state = AppState()
 
-        XCTAssertEqual(state.defaultTarget, .claudeCode)
-        XCTAssertEqual(state.claudeCodeMode, .terminal)
+        XCTAssertEqual(state.defaultTarget, .clipboard)
         XCTAssertEqual(state.hotkeyMode, .pushToTalk)
         XCTAssertEqual(state.hotkeyTrigger, .keyboardShortcut)
         XCTAssertEqual(state.modelPath, "~/models/ggml-medium.bin")
@@ -67,10 +66,9 @@ final class AppStateTests: XCTestCase {
 
     func testSaveTargetClipStoresPerTarget() {
         let state = AppState()
-        state.saveTargetClip(" hello ", for: .codex)
-        state.saveTargetClip("world", for: .claudeCode)
+        state.saveTargetClip(" hello ", for: .clipboard)
+        state.saveTargetClip("world", for: .clipboard)
 
-        XCTAssertEqual(state.targetClips[.codex], "hello")
-        XCTAssertEqual(state.targetClips[.claudeCode], "world")
+        XCTAssertEqual(state.targetClips[.clipboard], "world")
     }
 }

@@ -119,24 +119,6 @@ public struct TwoRelayCoreScene: Scene {
                     updatesDisabledReason: updaterController.configurationErrorMessage,
                     onCheckForUpdates: updateCheckAction
                 )
-
-                guard state.launchTargetOnStartupEnabled else {
-                    return
-                }
-                guard state.defaultTarget != .clipboard else {
-                    return
-                }
-
-                do {
-                    try targetDispatcher.ensureTargetIsRunning(
-                        state.defaultTarget,
-                        activate: false,
-                        claudeCodeMode: state.claudeCodeMode
-                    )
-                    print("[2relay] startup: launched \(state.defaultTarget.displayName) in background")
-                } catch {
-                    print("[2relay] startup: failed to open \(state.defaultTarget.displayName): \(error.localizedDescription)")
-                }
             }
         }
     }

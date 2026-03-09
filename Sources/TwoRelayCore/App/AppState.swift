@@ -85,8 +85,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    @Published var defaultTarget: TargetApp = .claudeCode
-    @Published var claudeCodeMode: ClaudeCodeMode = .terminal
+    @Published var defaultTarget: TargetApp = .clipboard
     @Published var hotkeyMode: HotkeyMode = .pushToTalk
     @Published var hotkeyTrigger: HotkeyTrigger = .keyboardShortcut {
         didSet {
@@ -223,7 +222,7 @@ final class AppState: ObservableObject {
     func selectNextTarget() {
         let all = TargetApp.allCases
         guard let index = all.firstIndex(of: defaultTarget) else {
-            defaultTarget = .claudeCode
+            defaultTarget = .clipboard
             return
         }
 
@@ -234,7 +233,7 @@ final class AppState: ObservableObject {
     func selectPreviousTarget() {
         let all = TargetApp.allCases
         guard let index = all.firstIndex(of: defaultTarget) else {
-            defaultTarget = .claudeCode
+            defaultTarget = .clipboard
             return
         }
 

@@ -11,33 +11,13 @@ struct SettingsView: View {
 
             sectionCard {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Target App")
+                    Text("Send Target")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(secondaryTextColor)
 
-                    Picker("Default target app", selection: $state.defaultTarget) {
-                        ForEach(TargetApp.allCases) { target in
-                            Text(target.displayName).tag(target)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-
-                    if state.defaultTarget == .claudeCode {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Claude Code mode")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(secondaryTextColor)
-
-                            Picker("Claude Code mode", selection: $state.claudeCodeMode) {
-                                ForEach(ClaudeCodeMode.allCases) { mode in
-                                    Text(mode.displayName).tag(mode)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.segmented)
-                        }
-                    }
+                    Text("2relay now pastes into the currently focused app only.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(mainTextColor)
                 }
             }
 
@@ -48,7 +28,6 @@ struct SettingsView: View {
                         .foregroundStyle(secondaryTextColor)
 
                     trailingToggleRow("Clean prompt", isOn: $state.cleanPromptEnabled)
-                    trailingToggleRow("Open target app when 2relay starts", isOn: $state.launchTargetOnStartupEnabled)
                     trailingToggleRow("Auto-copy prompt clip to clipboard", isOn: $state.autoCopyPromptToClipboardEnabled)
                     trailingToggleRow("Auto-send prompt after transcription", isOn: $state.autoSendAfterTranscriptionEnabled)
                 }

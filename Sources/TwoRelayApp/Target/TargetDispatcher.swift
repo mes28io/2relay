@@ -30,13 +30,12 @@ enum TargetDispatcherError: LocalizedError {
 @MainActor
 final class TargetDispatcher {
     private let permissionCenter: PermissionCenter
-    private var bootstrappedSessionKeys = Set<String>()
 
     init(permissionCenter: PermissionCenter) {
         self.permissionCenter = permissionCenter
     }
 
-    func activateAndPaste(text: String, target: TargetApp, claudeCodeMode: ClaudeCodeMode = .terminal) throws {
+    func activateAndPaste(text: String, target: TargetApp) throws {
         let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else {
             throw TargetDispatcherError.textIsEmpty
@@ -44,36 +43,19 @@ final class TargetDispatcher {
 
         writeToPasteboard(prompt)
 
-        if target == .clipboard {
-            // "Anywhere" target: paste into the currently focused input without switching apps.
-            Thread.sleep(forTimeInterval: 0.06)
-            try injectCommandV()
-            return
-        }
-
-        try ensureTargetIsRunning(target, activate: true, claudeCodeMode: claudeCodeMode)
-
-        // Allow the activated app to become frontmost before injecting Cmd+V.
+        // "Anywhere" target: paste into the currently focused input without switching apps.
         Thread.sleep(forTimeInterval: 0.15)
         try injectCommandV()
     }
 
-    func ensureTargetIsRunning(_ target: TargetApp, activate: Bool, claudeCodeMode: ClaudeCodeMode = .terminal) throws {
+    func ensureTargetIsRunning(_ target: TargetApp, activate: Bool) throws {
         if target == .clipboard {
             return
         }
 
-        let app = try runningOrLaunch(target, activate: activate, claudeCodeMode: claudeCodeMode)
+        let app = try runningOrLaunch(target, activate: activate)
         guard !activate || app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) else {
             throw TargetDispatcherError.activationFailed(target)
-        }
-
-        if target == .claudeCode, claudeCodeMode == .terminal {
-            bootstrapTerminalCommandIfNeeded("claude", for: app)
-        }
-
-        if target == .codex {
-            bootstrapTerminalCommandIfNeeded("codex", for: app)
         }
     }
 
@@ -87,12 +69,12 @@ final class TargetDispatcher {
         pasteboard.setString(text, forType: .string)
     }
 
-    private func runningOrLaunch(_ target: TargetApp, activate: Bool, claudeCodeMode: ClaudeCodeMode) throws -> NSRunningApplication {
-        if let running = runningApplication(for: target, claudeCodeMode: claudeCodeMode) {
+    private func runningOrLaunch(_ target: TargetApp, activate: Bool) throws -> NSRunningApplication {
+        if let running = runningApplication(for: target) {
             return running
         }
 
-        guard let appURL = firstInstalledAppURL(for: target, claudeCodeMode: claudeCodeMode) else {
+        guard let appURL = firstInstalledAppURL(for: target) else {
             throw TargetDispatcherError.appUnavailable(target)
         }
 
@@ -102,7 +84,7 @@ final class TargetDispatcher {
 
         let deadline = Date().addingTimeInterval(3.0)
         while Date() < deadline {
-            if let launched = runningApplication(for: target, claudeCodeMode: claudeCodeMode) {
+            if let launched = runningApplication(for: target) {
                 return launched
             }
             Thread.sleep(forTimeInterval: 0.05)
@@ -111,8 +93,8 @@ final class TargetDispatcher {
         throw TargetDispatcherError.appUnavailable(target)
     }
 
-    private func runningApplication(for target: TargetApp, claudeCodeMode: ClaudeCodeMode) -> NSRunningApplication? {
-        for bundleID in target.preferredBundleIdentifiers(claudeCodeMode: claudeCodeMode) {
+    private func runningApplication(for target: TargetApp) -> NSRunningApplication? {
+        for bundleID in target.preferredBundleIdentifiers() {
             if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
                 return app
             }
@@ -120,77 +102,13 @@ final class TargetDispatcher {
         return nil
     }
 
-    private func firstInstalledAppURL(for target: TargetApp, claudeCodeMode: ClaudeCodeMode) -> URL? {
-        for bundleID in target.preferredBundleIdentifiers(claudeCodeMode: claudeCodeMode) {
+    private func firstInstalledAppURL(for target: TargetApp) -> URL? {
+        for bundleID in target.preferredBundleIdentifiers() {
             if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
                 return url
             }
         }
         return nil
-    }
-
-    private func bootstrapTerminalCommandIfNeeded(_ command: String, for app: NSRunningApplication) {
-        guard let bundleID = app.bundleIdentifier else {
-            return
-        }
-        let sessionKey = "\(bundleID)::\(command)"
-        guard !bootstrappedSessionKeys.contains(sessionKey) else {
-            return
-        }
-
-        let started: Bool
-        switch bundleID {
-        case "com.apple.Terminal":
-            started = runAppleScript(
-                """
-                tell application "Terminal"
-                    activate
-                    if not (exists front window) then
-                        do script "\(command)"
-                    else
-                        do script "\(command)" in front window
-                    end if
-                end tell
-                """
-            )
-        case "com.googlecode.iterm2":
-            started = runAppleScript(
-                """
-                tell application "iTerm"
-                    activate
-                    if (count of windows) = 0 then
-                        create window with default profile
-                    end if
-                    tell current session of current window
-                        write text "\(command)"
-                    end tell
-                end tell
-                """
-            )
-        default:
-            started = false
-        }
-
-        if started {
-            bootstrappedSessionKeys.insert(sessionKey)
-            // Give CLI a moment to initialize before paste.
-            Thread.sleep(forTimeInterval: 0.45)
-        }
-    }
-
-    private func runAppleScript(_ source: String) -> Bool {
-        guard let script = NSAppleScript(source: source) else {
-            return false
-        }
-
-        var error: NSDictionary?
-        script.executeAndReturnError(&error)
-        if let error {
-            print("[2relay] AppleScript failed: \(error)")
-            return false
-        }
-
-        return true
     }
 
     private func injectCommandV() throws {

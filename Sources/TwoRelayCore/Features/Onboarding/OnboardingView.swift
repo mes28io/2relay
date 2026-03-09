@@ -172,7 +172,7 @@ struct OnboardingView: View {
                 onboardingFeatureRow(
                     icon: "paperplane.fill",
                     title: "Paste where you work",
-                    description: "Send to Claude Code, Codex, or clipboard for any app."
+                    description: "Paste directly into the currently focused app."
                 )
             }
             .padding(14)
@@ -193,32 +193,13 @@ struct OnboardingView: View {
             stepTitleCard(title: currentStep.title, subtitle: currentStep.subtitle)
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("Default target")
+                Text("Send target")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(secondaryTextColor)
 
-                Picker("Default target", selection: $state.defaultTarget) {
-                    ForEach(TargetApp.allCases) { target in
-                        Text(target.displayName).tag(target)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-
-                if state.defaultTarget == .claudeCode {
-                    Text("Claude Code mode")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(secondaryTextColor)
-                        .padding(.top, 2)
-
-                    Picker("Claude Code mode", selection: $state.claudeCodeMode) {
-                        ForEach(ClaudeCodeMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                }
+                Text("2relay sends prompts to the current focused app only.")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(mainTextColor)
             }
             .padding(14)
             .background(cardBackgroundColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))

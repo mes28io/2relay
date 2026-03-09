@@ -65,7 +65,7 @@ final class WhisperTestFlowCoordinator {
                 if appState.cleanPromptEnabled {
                     finalPrompt = promptCleaner.clean(
                         rawText: correctedTranscript,
-                        style: style(for: appState.defaultTarget)
+                        style: .codex
                     )
                     print("[2relay] cleaned coding prompt:\n\(finalPrompt)")
                 } else {
@@ -88,14 +88,4 @@ final class WhisperTestFlowCoordinator {
         }
     }
 
-    private func style(for target: TargetApp) -> PromptCleaner.Style {
-        switch target {
-        case .claudeCode:
-            return .claudeCode
-        case .codex:
-            return .codex
-        case .clipboard:
-            return .codex
-        }
-    }
 }

@@ -26,8 +26,6 @@ struct MenuBarView: View {
             }
             .disabled(!canCheckForUpdates)
 
-            Button("Target: \(state.defaultTarget.displayName)") {}
-                .disabled(true)
             Button("Status: \(state.overlayState.title)") {}
                 .disabled(true)
             Button("Hotkey: \(state.activeHotkeyDisplayText)") {}

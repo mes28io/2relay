@@ -733,7 +733,7 @@ struct MainView: View {
     private var targetCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Target App")
+                Text("Send Target")
                     .font(.title3.weight(.medium))
                 Spacer()
                 Text(state.defaultTarget.displayName)
@@ -741,13 +741,9 @@ struct MainView: View {
                     .foregroundStyle(secondaryTextColor)
             }
 
-            Picker("Target App", selection: $state.defaultTarget) {
-                ForEach(TargetApp.allCases) { target in
-                    Text(target.displayName).tag(target)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
+            Text("2relay pastes into whichever app is focused when you send.")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(secondaryTextColor)
         }
         .padding(14)
         .background(cardBackgroundColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
