@@ -263,6 +263,9 @@ struct MainView: View {
             SettingsView(
                 state: state,
                 permissionCenter: permissionCenter,
+                canCheckForUpdates: canCheckForUpdates,
+                updatesDisabledReason: updatesDisabledReason,
+                onCheckForUpdates: onCheckForUpdates,
                 onClose: {
                     closeSettingsPanel()
                 }

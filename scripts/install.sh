@@ -45,6 +45,7 @@ asset_name="${TWORELAY_ASSET_NAME:-2relay-macos.zip}"
 version="${TWORELAY_VERSION:-latest}" # Use a tag like v0.2.0 to pin a version.
 open_after_install="${TWORELAY_OPEN_AFTER_INSTALL:-1}"
 install_dir="${TWORELAY_INSTALL_DIR:-}"
+release_url_base="https://github.com/${repo}/releases"
 
 if [[ -z "${install_dir}" ]]; then
   if [[ -w "/Applications" ]]; then
@@ -57,22 +58,21 @@ fi
 mkdir -p "${install_dir}" || die "could not create install directory: ${install_dir}"
 [[ -w "${install_dir}" ]] || die "install directory is not writable: ${install_dir}"
 
+resolved_version="${version}"
 if [[ "${version}" == "latest" ]]; then
-  download_url="https://github.com/${repo}/releases/latest/download/${asset_name}"
-else
-  download_url="https://github.com/${repo}/releases/download/${version}/${asset_name}"
+  latest_release_url="$(
+    curl --fail --location --silent --show-error --output /dev/null \
+      --write-out '%{url_effective}' \
+      "${release_url_base}/latest"
+  )"
+  resolved_version="${latest_release_url##*/}"
+  [[ -n "${resolved_version}" ]] || die "could not resolve latest GitHub release tag for ${repo}"
 fi
+
+download_url="${release_url_base}/download/${resolved_version}/${asset_name}"
 checksum_url="${download_url}.sha256"
 download_request_url="${download_url}"
 checksum_request_url="${checksum_url}"
-
-if [[ "${version}" == "latest" ]]; then
-  # GitHub CDN can briefly cache an older "latest" asset URL.
-  # Add a cache-busting query to ensure fresh binaries are fetched.
-  cache_buster="$(date +%s)"
-  download_request_url="${download_url}?t=${cache_buster}"
-  checksum_request_url="${checksum_url}?t=${cache_buster}"
-fi
 
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/2relay-install.XXXXXX")"
 cleanup() {
@@ -87,6 +87,7 @@ dest_app="${install_dir}/2relay.app"
 
 mkdir -p "${unpack_dir}"
 
+echo "[2relay] installing release ${resolved_version}"
 echo "[2relay] downloading ${download_url}"
 curl --fail --location --retry 3 --retry-delay 1 --connect-timeout 15 --progress-bar "${download_request_url}" -o "${zip_path}"
 
@@ -165,6 +166,7 @@ if [[ -n "${bundle_id}" ]]; then
 fi
 
 echo "[2relay] installed: ${dest_app}"
+echo "[2relay] release: ${resolved_version}"
 
 if [[ "${open_after_install}" == "1" ]]; then
   open -a "${dest_app}" || true

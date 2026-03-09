@@ -20,10 +20,13 @@ archive_app="${archive_path}/Products/Applications/2relay.app"
 output_app="${export_dir}/2relay.app"
 team_id="${TEAM_ID:-${DEVELOPMENT_TEAM:-}}"
 allow_unsigned="${ALLOW_UNSIGNED_BUILD:-0}"
+marketing_version="$(default_marketing_version)"
+build_version="$(default_build_version)"
 
 [[ -d "${project_path}" ]] || die "missing project: ${project_path}"
 
 echo "[2relay] archiving ${scheme} from ${project_path}..."
+echo "[2relay] app version: ${marketing_version} (${build_version})"
 if [[ -n "${team_id}" ]]; then
   echo "[2relay] using DEVELOPMENT_TEAM=${team_id}"
 else
@@ -41,6 +44,8 @@ xcodebuild_args=(
   -archivePath "${archive_path}"
   archive
   SKIP_INSTALL=NO
+  MARKETING_VERSION="${marketing_version}"
+  CURRENT_PROJECT_VERSION="${build_version}"
 )
 
 if [[ -n "${team_id}" ]]; then

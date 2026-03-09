@@ -9,7 +9,7 @@ dist_dir="$(default_dist_dir)"
 updates_dir="${dist_dir}/updates"
 mkdir -p "${updates_dir}"
 
-app_path="${1:-${dist_dir}/2relay.app}"
+app_path="${1:-${dist_dir}/export/2relay.app}"
 [[ -d "${app_path}" ]] || die "app not found: ${app_path}"
 
 short_version="$(bundle_value "${app_path}" CFBundleShortVersionString)"

@@ -5,6 +5,7 @@ Project and target:
 - Scheme: `2relay`
 - Bundle id (placeholder): `dev.tworelay.app`
 - Primary distribution: GitHub Release zip + `scripts/install.sh`
+- In-app updates: Sparkle feed served from GitHub Raw `appcast.xml`
 
 ## 1) One-time setup
 
@@ -23,7 +24,7 @@ xcodegen generate
 
 ```bash
 cd /Users/mdapro/Desktop/2relay
-./scripts/build_release.sh
+TWORELAY_MARKETING_VERSION=0.1.8 ./scripts/build_release.sh
 ```
 
 Expected output:
@@ -33,23 +34,39 @@ Expected output:
 
 ```bash
 ./scripts/make_release_zip.sh
+./scripts/make_update_zip.sh dist/export/2relay.app
 ```
 
 Expected outputs:
 - `dist/2relay-macos.zip`
 - `dist/2relay-macos.zip.sha256`
+- `dist/updates/2relay-0.1.8-<build>.zip`
 
 ## 4) Publish GitHub release
 
-Create a GitHub Release (for example tag `v0.1.0`) and upload:
+Create a GitHub Release (for example tag `v0.1.8`) and upload:
 - `dist/2relay-macos.zip`
 - `dist/2relay-macos.zip.sha256`
+- `dist/updates/2relay-0.1.8-<build>.zip`
+
+Then refresh the Sparkle feed:
+
+```bash
+DOWNLOAD_BASE_URL="https://github.com/mes28io/2relay/releases/download/v0.1.8" \
+APPCAST_BASE_URL="https://raw.githubusercontent.com/mes28io/2relay/main" \
+SPARKLE_PRIVATE_KEY_PATH="$HOME/.config/2relay/sparkle_ed25519_key" \
+./scripts/write_appcast.sh dist/updates/2relay-0.1.8-<build>.zip dist/export/2relay.app
+```
+
+Commit the updated `appcast.xml` to `main` after the release assets are live.
 
 Installer command users run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mes28io/2relay/main/scripts/install.sh | bash
 ```
+
+This installs the latest GitHub Release, not unreleased commits on `main`.
 
 Install a specific tag:
 

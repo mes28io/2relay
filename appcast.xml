@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>2relay Updates</title>
+    <link>https://raw.githubusercontent.com/mes28io/2relay/main/appcast.xml</link>
+    <description>Latest release updates for 2relay.</description>
+    <language>en</language>
+  </channel>
+</rss>

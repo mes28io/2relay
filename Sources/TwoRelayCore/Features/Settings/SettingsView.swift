@@ -3,6 +3,9 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var state: AppState
     @ObservedObject var permissionCenter: PermissionCenter
+    var canCheckForUpdates: Bool = false
+    var updatesDisabledReason: String? = nil
+    var onCheckForUpdates: (() -> Void)? = nil
     var onClose: (() -> Void)? = nil
 
     var body: some View {
@@ -32,6 +35,30 @@ struct SettingsView: View {
                     trailingToggleRow("Auto-send prompt after transcription", isOn: $state.autoSendAfterTranscriptionEnabled)
                 }
                 .toggleStyle(.switch)
+            }
+
+            sectionCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Updates")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(secondaryTextColor)
+                        Spacer()
+                        Button("Check Now") {
+                            onCheckForUpdates?()
+                        }
+                        .font(.system(size: 12, weight: .semibold))
+                        .disabled(!canCheckForUpdates || onCheckForUpdates == nil)
+                    }
+
+                    Text("2relay can check GitHub-hosted release updates automatically when a release build includes a valid Sparkle feed.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(mainTextColor)
+
+                    Text(canCheckForUpdates ? "Automatic update checks are enabled for this build." : (updatesDisabledReason ?? "Updates are not available in this build yet."))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(secondaryTextColor)
+                }
             }
 
             sectionCard {

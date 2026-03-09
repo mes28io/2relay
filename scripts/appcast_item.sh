@@ -14,7 +14,7 @@ artifact_path="${1:-}"
 [[ -n "${artifact_path}" ]] || die "usage: $0 /abs/path/to/update.zip [/abs/path/to/2relay.app]"
 [[ -f "${artifact_path}" ]] || die "artifact not found: ${artifact_path}"
 
-app_path="${2:-$(default_dist_dir)/2relay.app}"
+app_path="${2:-$(default_dist_dir)/export/2relay.app}"
 if [[ -d "${app_path}" ]]; then
   short_version="$(bundle_value "${app_path}" CFBundleShortVersionString)"
   build_version="$(bundle_value "${app_path}" CFBundleVersion)"
@@ -45,7 +45,8 @@ if [[ -z "${ed_signature}" ]]; then
 fi
 [[ -n "${ed_signature}" ]] || die "failed to parse EdDSA signature from sign_update output"
 
-cat <<EOF
+if [[ "${APPCAST_INCLUDE_HINT:-1}" == "1" ]]; then
+  cat <<EOF
 <!-- Add this item to ${APPCAST_BASE_URL%/}/appcast.xml -->
 <item>
   <title>2relay ${short_version}</title>
@@ -55,3 +56,14 @@ cat <<EOF
   <enclosure url="${download_url}" length="${length}" type="${enclosure_type}" sparkle:edSignature="${ed_signature}" />
 </item>
 EOF
+else
+  cat <<EOF
+<item>
+  <title>2relay ${short_version}</title>
+  <pubDate>${pub_date}</pubDate>
+  <sparkle:version>${build_version}</sparkle:version>
+  <sparkle:shortVersionString>${short_version}</sparkle:shortVersionString>
+  <enclosure url="${download_url}" length="${length}" type="${enclosure_type}" sparkle:edSignature="${ed_signature}" />
+</item>
+EOF
+fi
