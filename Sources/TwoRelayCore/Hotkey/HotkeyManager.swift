@@ -411,7 +411,7 @@ final class HotkeyManager: ObservableObject {
     private var functionKeyMonitor: FunctionKeyMonitor!
     private var keyIsHeld = false
     private var toggleListening = false
-    private var lastRegisteredTrigger: AppState.HotkeyTrigger?
+    private var isRecorderActive = false
     private var lastRegisteredShortcut: KeyboardShortcuts.Shortcut?
     private var cancellables = Set<AnyCancellable>()
 
@@ -448,6 +448,7 @@ final class HotkeyManager: ObservableObject {
         bindModeChanges()
         bindTriggerChanges()
         bindShortcutChanges()
+        bindRecorderActivity()
         bindLifecycleChanges()
     }
 
@@ -471,7 +472,6 @@ final class HotkeyManager: ObservableObject {
             hotkeyMonitor.unregister()
             keyEventFallbackMonitor.stop()
             functionKeyMonitor.start()
-            lastRegisteredTrigger = .functionKey
             lastRegisteredShortcut = nil
 
             if reason == .preferencesChange {
@@ -512,7 +512,6 @@ final class HotkeyManager: ObservableObject {
 
         let status = hotkeyMonitor.register(shortcut: selectedShortcut)
         if status == noErr {
-            lastRegisteredTrigger = .keyboardShortcut
             lastRegisteredShortcut = selectedShortcut
             print("[2relay] hotkey registered (\(hotkeyMonitor.activeTargetLabel)): \(selectedShortcut.description)")
             if reason == .preferencesChange {
@@ -532,7 +531,6 @@ final class HotkeyManager: ObservableObject {
             let fallbackStatus = hotkeyMonitor.register(shortcut: fallback)
             if fallbackStatus == noErr {
                 KeyboardShortcuts.setShortcut(fallback, for: .relayListen)
-                lastRegisteredTrigger = .keyboardShortcut
                 lastRegisteredShortcut = fallback
                 keyEventFallbackMonitor.start(shortcut: fallback)
                 print("[2relay] hotkey fallback registered (\(hotkeyMonitor.activeTargetLabel)): \(fallback.description)")
@@ -586,6 +584,17 @@ final class HotkeyManager: ObservableObject {
             .store(in: &cancellables)
     }
 
+    private func bindRecorderActivity() {
+        let recorderNotification = Notification.Name("KeyboardShortcuts_recorderActiveStatusDidChange")
+        NotificationCenter.default.publisher(for: recorderNotification)
+            .compactMap { $0.userInfo?["isActive"] as? Bool }
+            .removeDuplicates()
+            .sink { [weak self] isActive in
+                self?.setRecorderActive(isActive)
+            }
+            .store(in: &cancellables)
+    }
+
     private func bindLifecycleChanges() {
         NotificationCenter.default.publisher(for: NSApplication.didFinishLaunchingNotification)
             .merge(with: NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
@@ -630,6 +639,10 @@ final class HotkeyManager: ObservableObject {
     }
 
     private func handleKeyDown() {
+        guard !isRecorderActive else {
+            return
+        }
+
         guard !keyIsHeld else {
             return
         }
@@ -643,6 +656,10 @@ final class HotkeyManager: ObservableObject {
     }
 
     private func handleKeyUp() {
+        guard !isRecorderActive else {
+            return
+        }
+
         guard keyIsHeld else {
             return
         }
@@ -673,6 +690,23 @@ final class HotkeyManager: ObservableObject {
         keyIsHeld = false
         if appState.isListening {
             appState.stopListening()
+        }
+    }
+
+    private func setRecorderActive(_ isActive: Bool) {
+        guard isRecorderActive != isActive else {
+            return
+        }
+
+        isRecorderActive = isActive
+
+        if isActive {
+            releaseHeldHotkeyIfNeeded()
+            hotkeyMonitor.unregister()
+            keyEventFallbackMonitor.stop()
+            functionKeyMonitor.stop()
+        } else {
+            registerCurrentShortcut(reason: .preferencesChange)
         }
     }
 
