@@ -9,6 +9,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(state.defaultTarget, .claudeCode)
         XCTAssertEqual(state.claudeCodeMode, .terminal)
         XCTAssertEqual(state.hotkeyMode, .pushToTalk)
+        XCTAssertEqual(state.hotkeyTrigger, .keyboardShortcut)
         XCTAssertEqual(state.modelPath, "~/models/ggml-medium.bin")
         XCTAssertTrue(state.cleanPromptEnabled)
         XCTAssertTrue(state.launchTargetOnStartupEnabled)

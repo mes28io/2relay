@@ -624,6 +624,14 @@ struct MainView: View {
             Text("Hotkey")
                 .font(.title3.weight(.medium))
 
+            Picker("Hotkey trigger", selection: $state.hotkeyTrigger) {
+                ForEach(AppState.HotkeyTrigger.allCases) { trigger in
+                    Text(trigger.displayName).tag(trigger)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+
             Picker("Hotkey mode", selection: $state.hotkeyMode) {
                 ForEach(AppState.HotkeyMode.allCases) { mode in
                     Text(mode.displayName).tag(mode)
@@ -632,15 +640,30 @@ struct MainView: View {
             .labelsHidden()
             .pickerStyle(.segmented)
 
-            Text("Tap the field, then press your shortcut keys.")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(secondaryTextColor)
+            if state.hotkeyTrigger == .keyboardShortcut {
+                Text("Tap the field, then press your shortcut keys.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(secondaryTextColor)
 
-            HotkeyRecorderField(name: .relayListen) { shortcut in
-                let shortcutText = shortcut?.description ?? "none"
-                state.reportStatus("Hotkey updated: \(shortcutText)", level: .success)
-            }
+                HotkeyRecorderField(name: .relayListen) { shortcut in
+                    let shortcutText = shortcut?.description ?? "None"
+                    state.reportStatus("Hotkey updated: \(shortcutText)", level: .success)
+                }
                 .frame(height: 28)
+            } else {
+                Text("Hold Fn to record. Release Fn to stop and transcribe.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(secondaryTextColor)
+            }
+
+            HStack(spacing: 8) {
+                Text("Current:")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(secondaryTextColor)
+                Text(state.activeHotkeyDisplayText)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(mainTextColor)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)

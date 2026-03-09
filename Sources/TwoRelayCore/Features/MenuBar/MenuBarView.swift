@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import KeyboardShortcuts
 
 struct MenuBarView: View {
     @ObservedObject var state: AppState
@@ -31,7 +30,7 @@ struct MenuBarView: View {
                 .disabled(true)
             Button("Status: \(state.overlayState.title)") {}
                 .disabled(true)
-            Button("Hotkey: \(KeyboardShortcuts.getShortcut(for: .relayListen)?.description ?? "None")") {}
+            Button("Hotkey: \(state.activeHotkeyDisplayText)") {}
                 .disabled(true)
 
             Divider()

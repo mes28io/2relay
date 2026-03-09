@@ -317,6 +317,85 @@ private final class KeyEventFallbackMonitor {
     }
 }
 
+private final class FunctionKeyMonitor {
+    private let instanceID = UUID().uuidString.prefix(8)
+    private let onKeyDown: @MainActor () -> Void
+    private let onKeyUp: @MainActor () -> Void
+    private var localMonitor: Any?
+    private var globalMonitor: Any?
+    private var isActive = false
+    private var isFunctionKeyHeld = false
+
+    init(
+        onKeyDown: @escaping @MainActor () -> Void,
+        onKeyUp: @escaping @MainActor () -> Void
+    ) {
+        self.onKeyDown = onKeyDown
+        self.onKeyUp = onKeyUp
+        print("[2relay] function key monitor init: \(instanceID)")
+    }
+
+    deinit {
+        print("[2relay] function key monitor deinit: \(instanceID)")
+        stop()
+    }
+
+    func start() {
+        guard !isActive else {
+            return
+        }
+
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged]) { [weak self] event in
+            self?.handle(event)
+        }
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged]) { [weak self] event in
+            self?.handle(event)
+            return event
+        }
+        isActive = true
+        print("[2relay] function key monitor enabled (\(instanceID))")
+    }
+
+    func stop() {
+        if let localMonitor {
+            NSEvent.removeMonitor(localMonitor)
+            self.localMonitor = nil
+        }
+
+        if let globalMonitor {
+            NSEvent.removeMonitor(globalMonitor)
+            self.globalMonitor = nil
+        }
+
+        if isActive {
+            print("[2relay] function key monitor disabled (\(instanceID))")
+        }
+
+        isFunctionKeyHeld = false
+        isActive = false
+    }
+
+    private func handle(_ event: NSEvent) {
+        guard event.type == .flagsChanged else {
+            return
+        }
+
+        let functionKeyHeld = event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.function)
+        guard functionKeyHeld != isFunctionKeyHeld else {
+            return
+        }
+
+        isFunctionKeyHeld = functionKeyHeld
+        Task { @MainActor in
+            if functionKeyHeld {
+                onKeyDown()
+            } else {
+                onKeyUp()
+            }
+        }
+    }
+}
+
 @MainActor
 final class HotkeyManager: ObservableObject {
     private enum RegistrationReason {
@@ -329,8 +408,10 @@ final class HotkeyManager: ObservableObject {
     private let instanceID = UUID().uuidString.prefix(8)
     private var hotkeyMonitor: CarbonHotkeyMonitor!
     private var keyEventFallbackMonitor: KeyEventFallbackMonitor!
+    private var functionKeyMonitor: FunctionKeyMonitor!
     private var keyIsHeld = false
     private var toggleListening = false
+    private var lastRegisteredTrigger: AppState.HotkeyTrigger?
     private var lastRegisteredShortcut: KeyboardShortcuts.Shortcut?
     private var cancellables = Set<AnyCancellable>()
 
@@ -353,10 +434,19 @@ final class HotkeyManager: ObservableObject {
                 self?.handleKeyUp()
             }
         )
+        functionKeyMonitor = FunctionKeyMonitor(
+            onKeyDown: { [weak self] in
+                self?.handleKeyDown()
+            },
+            onKeyUp: { [weak self] in
+                self?.handleKeyUp()
+            }
+        )
 
         migrateShortcutIfNeeded()
         registerCurrentShortcut(reason: .startup)
         bindModeChanges()
+        bindTriggerChanges()
         bindShortcutChanges()
         bindLifecycleChanges()
     }
@@ -375,6 +465,23 @@ final class HotkeyManager: ObservableObject {
     }
 
     private func registerCurrentShortcut(reason: RegistrationReason) {
+        releaseHeldHotkeyIfNeeded()
+
+        if appState.hotkeyTrigger == .functionKey {
+            hotkeyMonitor.unregister()
+            keyEventFallbackMonitor.stop()
+            functionKeyMonitor.start()
+            lastRegisteredTrigger = .functionKey
+            lastRegisteredShortcut = nil
+
+            if reason == .preferencesChange {
+                appState.reportStatus("Hotkey updated: Fn", level: .success)
+            }
+            return
+        }
+
+        functionKeyMonitor.stop()
+
         var selectedShortcut = KeyboardShortcuts.getShortcut(for: .relayListen) ?? RelayHotkeyDefaults.preferred
         if KeyboardShortcuts.getShortcut(for: .relayListen) == nil {
             KeyboardShortcuts.setShortcut(selectedShortcut, for: .relayListen)
@@ -405,6 +512,7 @@ final class HotkeyManager: ObservableObject {
 
         let status = hotkeyMonitor.register(shortcut: selectedShortcut)
         if status == noErr {
+            lastRegisteredTrigger = .keyboardShortcut
             lastRegisteredShortcut = selectedShortcut
             print("[2relay] hotkey registered (\(hotkeyMonitor.activeTargetLabel)): \(selectedShortcut.description)")
             if reason == .preferencesChange {
@@ -424,6 +532,7 @@ final class HotkeyManager: ObservableObject {
             let fallbackStatus = hotkeyMonitor.register(shortcut: fallback)
             if fallbackStatus == noErr {
                 KeyboardShortcuts.setShortcut(fallback, for: .relayListen)
+                lastRegisteredTrigger = .keyboardShortcut
                 lastRegisteredShortcut = fallback
                 keyEventFallbackMonitor.start(shortcut: fallback)
                 print("[2relay] hotkey fallback registered (\(hotkeyMonitor.activeTargetLabel)): \(fallback.description)")
@@ -438,6 +547,7 @@ final class HotkeyManager: ObservableObject {
         }
 
         hotkeyMonitor.unregister()
+        keyEventFallbackMonitor.stop()
         print("[2relay] no global hotkey could be registered")
         appState.reportStatus(
             "Could not register a global hotkey. Choose another shortcut in Settings > Shortcuts.",
@@ -445,10 +555,32 @@ final class HotkeyManager: ObservableObject {
         )
     }
 
-    private func bindShortcutChanges() {
-        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification, object: UserDefaults.standard)
-            .debounce(for: .milliseconds(120), scheduler: RunLoop.main)
+    private func bindTriggerChanges() {
+        appState.$hotkeyTrigger
+            .removeDuplicates()
             .sink { [weak self] _ in
+                self?.registerCurrentShortcut(reason: .preferencesChange)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func bindShortcutChanges() {
+        let shortcutChangeNotification = Notification.Name("KeyboardShortcuts_shortcutByNameDidChange")
+        let keyboardShortcutsChanges = NotificationCenter.default.publisher(for: shortcutChangeNotification)
+            .compactMap { $0.userInfo?["name"] as? KeyboardShortcuts.Name }
+            .filter { $0 == .relayListen }
+            .map { _ in () }
+
+        let userDefaultsChanges = NotificationCenter.default.publisher(
+            for: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard
+        )
+        .map { _ in () }
+
+        keyboardShortcutsChanges
+            .merge(with: userDefaultsChanges)
+            .debounce(for: .milliseconds(120), scheduler: RunLoop.main)
+            .sink { [weak self] in
                 self?.registerCurrentShortcut(reason: .preferencesChange)
             }
             .store(in: &cancellables)

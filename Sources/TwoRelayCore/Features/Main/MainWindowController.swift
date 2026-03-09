@@ -3,14 +3,15 @@ import Combine
 import SwiftUI
 
 @MainActor
-final class MainWindowController: ObservableObject {
+final class MainWindowController: NSObject, ObservableObject, NSWindowDelegate {
     private var window: NSWindow?
     private let layoutState = MainLayoutState()
     private var cancellables = Set<AnyCancellable>()
     private var onboardingVisibilityCancellable: AnyCancellable?
     private weak var sidebarToggleButton: NSButton?
 
-    init() {
+    override init() {
+        super.init()
         layoutState.$isSidebarCollapsed
             .sink { [weak self] _ in
                 self?.updateSidebarToggleButtonAppearance()
@@ -124,6 +125,7 @@ final class MainWindowController: ObservableObject {
         window.minSize = NSSize(width: 1100, height: 800)
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        window.delegate = self
         window.contentView = NSHostingView(
             rootView: makeRootView(
                 state: state,
@@ -139,6 +141,11 @@ final class MainWindowController: ObservableObject {
         )
         attachSidebarToggleAccessory(to: window)
         return window
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        sender.orderOut(nil)
+        return false
     }
 
     private func makeRootView(

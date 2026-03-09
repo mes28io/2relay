@@ -1,8 +1,10 @@
 import Foundation
+import KeyboardShortcuts
 
 @MainActor
 final class AppState: ObservableObject {
     private static let onboardingCompletedDefaultsKey = "com.2relay.onboarding.completed"
+    private static let hotkeyTriggerDefaultsKey = "com.2relay.hotkey.trigger"
 
     enum StatusLevel: Equatable {
         case info
@@ -57,9 +59,40 @@ final class AppState: ObservableObject {
         }
     }
 
+    enum HotkeyTrigger: String, CaseIterable, Identifiable {
+        case keyboardShortcut
+        case functionKey
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .keyboardShortcut:
+                return "Shortcut"
+            case .functionKey:
+                return "Fn"
+            }
+        }
+
+        @MainActor
+        var activeDisplayName: String {
+            switch self {
+            case .keyboardShortcut:
+                return KeyboardShortcuts.getShortcut(for: .relayListen)?.description ?? "None"
+            case .functionKey:
+                return "Fn"
+            }
+        }
+    }
+
     @Published var defaultTarget: TargetApp = .claudeCode
     @Published var claudeCodeMode: ClaudeCodeMode = .terminal
     @Published var hotkeyMode: HotkeyMode = .pushToTalk
+    @Published var hotkeyTrigger: HotkeyTrigger = .keyboardShortcut {
+        didSet {
+            userDefaults.set(hotkeyTrigger.rawValue, forKey: Self.hotkeyTriggerDefaultsKey)
+        }
+    }
     @Published var modelPath: String = "~/models/ggml-medium.bin"
     @Published var cleanPromptEnabled: Bool = true
     @Published var launchTargetOnStartupEnabled: Bool = true
@@ -83,6 +116,10 @@ final class AppState: ObservableObject {
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
         hasCompletedOnboarding = userDefaults.bool(forKey: Self.onboardingCompletedDefaultsKey)
+        if let savedHotkeyTrigger = userDefaults.string(forKey: Self.hotkeyTriggerDefaultsKey),
+           let hotkeyTrigger = HotkeyTrigger(rawValue: savedHotkeyTrigger) {
+            self.hotkeyTrigger = hotkeyTrigger
+        }
     }
 
     func completeOnboarding() {
@@ -155,6 +192,10 @@ final class AppState: ObservableObject {
     func setIdle() {
         overlayState = .idle
         reportStatus("Ready. Hold the hotkey to talk.", level: .info)
+    }
+
+    var activeHotkeyDisplayText: String {
+        hotkeyTrigger.activeDisplayName
     }
 
     func clearPendingPrompt() {
