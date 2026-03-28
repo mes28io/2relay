@@ -78,6 +78,9 @@ struct MainView: View {
             sidebarItemFrames = value
         }
         .animation(.easeInOut(duration: 0.16), value: state.isSettingsPanelPresented)
+        .task {
+            await state.licenseValidator.refreshTokenIfNeeded()
+        }
     }
 
     @ViewBuilder
@@ -104,6 +107,7 @@ struct MainView: View {
             OnboardingView(
                 state: state,
                 permissionCenter: permissionCenter,
+                licenseValidator: state.licenseValidator,
                 onComplete: {
                     selectedTab = .home
                 }
@@ -463,13 +467,7 @@ struct MainView: View {
             PromoHeadlineView(baseColor: mainTextColor)
                 .fixedSize(horizontal: false, vertical: true)
 
-            (
-                Text("2relay transforms your voice into clean English prompts for ")
-                + Text("Claude Code").bold()
-                + Text(" and ")
-                + Text("Codex").bold()
-                + Text(". Speak naturally, keep coding flow, and paste polished prompts instantly.")
-            )
+            Text("2relay transforms your voice into clean English prompts. Speak naturally, keep your flow, and paste polished prompts anywhere.")
             .font(.system(size: 15, weight: .regular))
             .foregroundStyle(mainTextColor.opacity(0.92))
             .lineSpacing(4)
@@ -915,12 +913,12 @@ struct MainView: View {
 }
 
 private struct PromoHeadlineView: View {
-    private let words = ["Claude Code", "Codex"]
+    private let words = ["your editor", "your terminal", "your browser"]
     private let scrambleCharacters = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
     private let baseColor: Color
     private let headlineFontSize: CGFloat = 33
     @State private var activeWordIndex = 0
-    @State private var displayedWord = "Claude Code"
+    @State private var displayedWord = "your editor"
 
     init(baseColor: Color) {
         self.baseColor = baseColor

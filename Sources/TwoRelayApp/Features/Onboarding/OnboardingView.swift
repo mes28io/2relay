@@ -7,6 +7,7 @@ private enum OnboardingStep: Int, CaseIterable, Identifiable {
     case shortcut
     case workflow
     case permissions
+    case license
 
     var id: Int { rawValue }
 
@@ -22,6 +23,8 @@ private enum OnboardingStep: Int, CaseIterable, Identifiable {
             return "How It Works"
         case .permissions:
             return "Permissions"
+        case .license:
+            return "Activate"
         }
     }
 
@@ -37,6 +40,8 @@ private enum OnboardingStep: Int, CaseIterable, Identifiable {
             return "Learn the quick voice-to-prompt flow."
         case .permissions:
             return "Grant required access for recording and auto-paste."
+        case .license:
+            return "Enter your license key to activate 2relay."
         }
     }
 }
@@ -44,6 +49,7 @@ private enum OnboardingStep: Int, CaseIterable, Identifiable {
 struct OnboardingView: View {
     @ObservedObject var state: AppState
     @ObservedObject var permissionCenter: PermissionCenter
+    @ObservedObject var licenseValidator: LicenseValidator
     let onComplete: () -> Void
 
     @State private var currentStep: OnboardingStep = .welcome
@@ -137,6 +143,8 @@ struct OnboardingView: View {
                 workflowStep
             case .permissions:
                 permissionsStep
+            case .license:
+                licenseStep
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -556,18 +564,95 @@ struct OnboardingView: View {
         }
     }
 
+    private var licenseStep: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            stepTitleCard(title: currentStep.title, subtitle: currentStep.subtitle)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("License key")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(secondaryTextColor)
+
+                TextField("Enter your license key", text: $licenseValidator.licenseKey)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 15, weight: .medium, design: .monospaced))
+                    .padding(10)
+                    .background(mainTextColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .disabled(licenseValidator.isValidating)
+
+                if let error = licenseValidator.validationError {
+                    Text(error)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.red)
+                }
+
+                if licenseValidator.isValidating {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Verifying license...")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(secondaryTextColor)
+                    }
+                }
+
+                if licenseValidator.isLicensed {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("License activated")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.green)
+                    }
+                }
+            }
+            .padding(14)
+            .background(cardBackgroundColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Don't have a license key?")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(secondaryTextColor)
+
+                Button("Get one at 2relay.dev") {
+                    if let url = URL(string: "https://2relay.dev") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(14)
+            .background(cardBackgroundColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            Spacer(minLength: 0)
+        }
+    }
+
     private var nextButtonTitle: String {
-        if currentStep == .permissions {
-            return "Finish Setup"
+        if currentStep == .license {
+            if licenseValidator.isLicensed {
+                return "Finish Setup"
+            }
+            return "Activate"
         }
 
         return "Continue"
     }
 
     private func handleNextAction() {
-        if currentStep == .permissions {
-            state.completeOnboarding()
-            onComplete()
+        if currentStep == .license {
+            if licenseValidator.isLicensed {
+                state.completeOnboarding()
+                onComplete()
+            } else {
+                Task {
+                    await licenseValidator.validate()
+                    if licenseValidator.isLicensed {
+                        state.reportStatus("License activated!", level: .success)
+                    }
+                }
+            }
             return
         }
 

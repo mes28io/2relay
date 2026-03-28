@@ -87,7 +87,7 @@ final class AppState: ObservableObject {
 
     @Published var defaultTarget: TargetApp = .clipboard
     @Published var hotkeyMode: HotkeyMode = .pushToTalk
-    @Published var hotkeyTrigger: HotkeyTrigger = .keyboardShortcut {
+    @Published var hotkeyTrigger: HotkeyTrigger = .functionKey {
         didSet {
             userDefaults.set(hotkeyTrigger.rawValue, forKey: Self.hotkeyTriggerDefaultsKey)
         }
@@ -110,10 +110,12 @@ final class AppState: ObservableObject {
     @Published private(set) var statusTimestamp: Date = .now
     @Published private(set) var statusHistory: [StatusEntry] = []
     @Published private(set) var targetClips: [TargetApp: String] = [:]
+    let licenseValidator: LicenseValidator
     private let userDefaults: UserDefaults
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
+        self.licenseValidator = LicenseValidator(userDefaults: userDefaults)
         hasCompletedOnboarding = userDefaults.bool(forKey: Self.onboardingCompletedDefaultsKey)
         if let savedHotkeyTrigger = userDefaults.string(forKey: Self.hotkeyTriggerDefaultsKey),
            let hotkeyTrigger = HotkeyTrigger(rawValue: savedHotkeyTrigger) {
@@ -135,6 +137,11 @@ final class AppState: ObservableObject {
 
     func startListening() {
         guard !isListening else {
+            return
+        }
+
+        guard licenseValidator.isLicensed else {
+            reportStatus("License required. Restart onboarding to activate.", level: .error)
             return
         }
 

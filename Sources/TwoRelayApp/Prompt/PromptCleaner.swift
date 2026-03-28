@@ -1,12 +1,7 @@
 import Foundation
 
 struct PromptCleaner {
-    enum Style: String, CaseIterable {
-        case claudeCode = "ClaudeCode"
-        case codex = "Codex"
-    }
-
-    func clean(rawText: String, style: Style) -> String {
+    func clean(rawText: String) -> String {
         let normalized = normalizeWhitespace(rawText)
         let goal = normalized.isEmpty ? "No transcript captured." : normalized
         return "- \(goal)"
@@ -220,8 +215,6 @@ struct PromptCleaner {
             "write tests",
             "swiftui",
             "xcode",
-            "claude code",
-            "codex",
             "api",
             "framework",
             "file",
@@ -233,14 +226,6 @@ struct PromptCleaner {
         return keywords.contains { lowered.contains($0) }
     }
 
-    func outputFormatLine(for style: Style) -> String {
-        switch style {
-        case .claudeCode:
-            return "Prompt-first markdown optimized for Claude Code terminal flow."
-        case .codex:
-            return "Implementation summary, changed files, and verification results."
-        }
-    }
 
     func renderTemplate(
         goal: String,

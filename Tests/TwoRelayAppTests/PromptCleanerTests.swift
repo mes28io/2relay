@@ -6,7 +6,7 @@ final class PromptCleanerTests: XCTestCase {
         let cleaner = PromptCleaner()
         let rawText = "Hey claude, today we are going to design a website with you. Are you ready?"
 
-        let cleaned = cleaner.clean(rawText: rawText, style: .claudeCode)
+        let cleaned = cleaner.clean(rawText: rawText)
 
         XCTAssertEqual(cleaned, "- \(rawText)")
         XCTAssertFalse(cleaned.contains("Context:"))
@@ -18,26 +18,15 @@ final class PromptCleanerTests: XCTestCase {
         let cleaner = PromptCleaner()
         let rawText = "  Hey   claude,\n\ntoday   we build  this  "
 
-        let cleaned = cleaner.clean(rawText: rawText, style: .codex)
+        let cleaned = cleaner.clean(rawText: rawText)
 
         XCTAssertEqual(cleaned, "- Hey claude, today we build this")
     }
 
     func testCleanerReturnsFallbackForEmptyInput() {
         let cleaner = PromptCleaner()
-        let cleaned = cleaner.clean(rawText: "   \n  ", style: .claudeCode)
+        let cleaned = cleaner.clean(rawText: "   \n  ")
 
         XCTAssertEqual(cleaned, "- No transcript captured.")
-    }
-
-    func testCleanerOutputIsSameAcrossStyles() {
-        let cleaner = PromptCleaner()
-        let rawText = "fix auth flow"
-
-        let claude = cleaner.clean(rawText: rawText, style: .claudeCode)
-        let codex = cleaner.clean(rawText: rawText, style: .codex)
-
-        XCTAssertEqual(claude, codex)
-        XCTAssertEqual(claude, "- fix auth flow")
     }
 }

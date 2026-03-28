@@ -9,3 +9,8 @@ dist/
 *.zip
 sparkle_private_key
 .sparkle_private_key
+license_private.pem
+license_public.pem
+web/
+2relay/
+.env.local

@@ -63,10 +63,7 @@ final class WhisperTestFlowCoordinator {
 
                 let finalPrompt: String
                 if appState.cleanPromptEnabled {
-                    finalPrompt = promptCleaner.clean(
-                        rawText: correctedTranscript,
-                        style: .codex
-                    )
+                    finalPrompt = promptCleaner.clean(rawText: correctedTranscript)
                     print("[2relay] cleaned coding prompt:\n\(finalPrompt)")
                 } else {
                     finalPrompt = correctedTranscript

@@ -8,7 +8,7 @@ final class AppStateTests: XCTestCase {
 
         XCTAssertEqual(state.defaultTarget, .clipboard)
         XCTAssertEqual(state.hotkeyMode, .pushToTalk)
-        XCTAssertEqual(state.hotkeyTrigger, .keyboardShortcut)
+        XCTAssertEqual(state.hotkeyTrigger, .functionKey)
         XCTAssertEqual(state.modelPath, "~/models/ggml-medium.bin")
         XCTAssertTrue(state.cleanPromptEnabled)
         XCTAssertTrue(state.launchTargetOnStartupEnabled)
@@ -25,6 +25,7 @@ final class AppStateTests: XCTestCase {
 
     func testStartAndStopListeningUpdatesState() {
         let state = AppState()
+        state.licenseValidator.forceActivateForTesting()
 
         state.startListening()
         XCTAssertTrue(state.isListening)
