@@ -16,7 +16,7 @@ final class LicenseValidator: ObservableObject {
         if let envURL = ProcessInfo.processInfo.environment["TWORELAY_API_URL"] {
             return envURL
         }
-        return "https://2eight.co/2relay"
+        return "https://2relay.2eight.co"
     }()
 
     // MARK: - Published state
