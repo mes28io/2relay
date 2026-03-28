@@ -614,8 +614,8 @@ struct OnboardingView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(secondaryTextColor)
 
-                Button("Get one at 2relay.dev") {
-                    if let url = URL(string: "https://2relay.dev") {
+                Button("Get one at 2eight.co/2relay") {
+                    if let url = URL(string: "https://2eight.co/2relay") {
                         NSWorkspace.shared.open(url)
                     }
                 }
