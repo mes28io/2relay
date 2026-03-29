@@ -85,13 +85,13 @@ final class PermissionCenter: ObservableObject {
 
         NSApp.activate(ignoringOtherApps: true)
 
-        _ = await requestMicrophoneAccessUsingAVAudioApplicationIfAvailable()
-        refreshFromSystem()
-        guard microphoneState != .granted else {
-            return
+        // Try the modern API first (macOS 14+), fall back to AVCaptureDevice.
+        // Only call ONE to avoid duplicate prompts.
+        if let result = await requestMicrophoneAccessUsingAVAudioApplicationIfAvailable() {
+            _ = result
+        } else {
+            _ = await requestMicrophoneAccessUsingAVCaptureDevice()
         }
-
-        _ = await requestMicrophoneAccessUsingAVCaptureDevice()
 
         refreshFromSystem()
     }
@@ -238,7 +238,7 @@ final class PermissionCenter: ObservableObject {
             case .restricted:
                 return "Microphone access is restricted by system policy."
             case .unknown:
-                return "Microphone access has not been requested yet."
+                return "Microphone access has not been requested yet. Tap Allow Microphone Access to show the native prompt."
             case .unrecognized:
                 return "Microphone state could not be recognized from system APIs."
             }

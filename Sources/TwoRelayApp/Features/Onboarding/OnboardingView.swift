@@ -338,17 +338,11 @@ struct OnboardingView: View {
                                 "Move 2relay.app to Applications, relaunch it from Applications, then allow microphone access.",
                                 level: .warning
                             )
+                            return
                         }
 
-                        permissionCenter.refreshFromSystem()
                         Task {
                             await permissionCenter.requestMicrophonePermissionIfNeeded()
-                            permissionCenter.refreshFromSystem()
-
-                            if permissionCenter.microphoneState != .granted {
-                                openSystemSettings(for: .microphone)
-                                state.reportStatus("Enable microphone access for 2relay in System Settings.", level: .warning)
-                            }
                         }
                     },
                     onOpenSettings: {
@@ -362,7 +356,7 @@ struct OnboardingView: View {
                     detail: permissionCenter.detailText(for: .accessibility),
                     allowButtonTitle: "Allow Access",
                     onAllowAccess: {
-                        permissionCenter.requestAccessibilityPromptIfNeeded(force: true)
+                        permissionCenter.requestAccessibilityPromptIfNeeded()
                         permissionCenter.refreshFromSystem()
                         if permissionCenter.accessibilityState != .granted {
                             openSystemSettings(for: .accessibility)

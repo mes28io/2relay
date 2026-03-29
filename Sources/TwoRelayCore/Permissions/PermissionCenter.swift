@@ -85,13 +85,13 @@ final class PermissionCenter: ObservableObject {
 
         NSApp.activate(ignoringOtherApps: true)
 
-        _ = await requestMicrophoneAccessUsingAVAudioApplicationIfAvailable()
-        refreshFromSystem()
-        guard microphoneState != .granted else {
-            return
+        // Try the modern API first (macOS 14+), fall back to AVCaptureDevice.
+        // Only call ONE to avoid duplicate prompts.
+        if let result = await requestMicrophoneAccessUsingAVAudioApplicationIfAvailable() {
+            _ = result
+        } else {
+            _ = await requestMicrophoneAccessUsingAVCaptureDevice()
         }
-
-        _ = await requestMicrophoneAccessUsingAVCaptureDevice()
 
         refreshFromSystem()
     }

@@ -110,20 +110,22 @@ struct SettingsView: View {
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(secondaryTextColor)
                         Spacer()
-                        Button("Check Now") {
+                        Button("Check for Updates") {
                             onCheckForUpdates?()
                         }
                         .font(.system(size: 12, weight: .semibold))
                         .disabled(!canCheckForUpdates || onCheckForUpdates == nil)
                     }
 
-                    Text("2relay can check GitHub-hosted release updates automatically when a release build includes a valid Sparkle feed.")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(mainTextColor)
-
-                    Text(canCheckForUpdates ? "Automatic update checks are enabled for this build." : (updatesDisabledReason ?? "Updates are not available in this build yet."))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(secondaryTextColor)
+                    if canCheckForUpdates {
+                        Text("If a new version is available, it will be downloaded and installed automatically. The app will restart after the update.")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(mainTextColor)
+                    } else {
+                        Text(updatesDisabledReason ?? "Updates are not available in this build.")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(mainTextColor)
+                    }
                 }
             }
 
@@ -247,22 +249,18 @@ struct SettingsView: View {
                 "Move 2relay.app to Applications, relaunch it from Applications, then allow microphone access.",
                 level: .warning
             )
+            return
         }
 
-        permissionCenter.refreshFromSystem()
-        guard permissionCenter.microphoneState != .granted else {
-            permissionCenter.refreshFromSystem()
+        guard permissionCenter.microphoneState != .granted else { return }
+
+        if permissionCenter.microphoneState == .denied {
+            openSystemSettings(for: .microphone)
             return
         }
 
         Task {
             await permissionCenter.requestMicrophonePermissionIfNeeded()
-            permissionCenter.refreshFromSystem()
-
-            if permissionCenter.microphoneState != .granted {
-                openSystemSettings(for: .microphone)
-                state.reportStatus("Enable microphone access for 2relay in System Settings.", level: .warning)
-            }
         }
     }
 
