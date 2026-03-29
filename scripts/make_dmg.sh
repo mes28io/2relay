@@ -27,44 +27,70 @@ cleanup() {
   if [[ -n "${device}" ]]; then
     hdiutil detach "${device}" -quiet >/dev/null 2>&1 || true
   fi
-  rm -rf "${staging_dir}" "${rw_dmg}" "${tmp_output}"
+  rm -rf "${staging_dir}" "${rw_dmg}" "${tmp_output}" "${dist_dir}/2relay-initial.dmg" "${dist_dir}/2relay-ro.dmg"
 }
 trap cleanup EXIT
 
 rsync -a "${app_path}" "${staging_dir}/"
 ln -s /Applications "${staging_dir}/Applications"
 
+# Check for background image (will be copied onto mounted volume later)
+bg_source="${REPO_ROOT}/scripts/resources/dmg-background.png"
+if [[ -f "${bg_source}" ]]; then
+  has_background=1
+else
+  has_background=0
+fi
+
 rm -f "${output_dmg}" "${rw_dmg}" "${tmp_output}"
 echo "[2relay] creating DMG: ${output_dmg}"
+
+# Create initial read-only DMG, then convert to true read-write
+initial_ro="${dist_dir}/2relay-ro.dmg"
+initial_dmg="${dist_dir}/2relay-initial.dmg"
+rm -f "${initial_ro}" "${initial_dmg}"
 hdiutil create \
   -volname "${volume_name}" \
   -srcfolder "${staging_dir}" \
   -fs HFS+ \
-  -format UDRW \
-  "${rw_dmg}" \
+  -format UDRO \
+  "${initial_ro}" \
   >/dev/null
 
-attach_output="$(hdiutil attach -readwrite -noverify -noautoopen "${rw_dmg}")"
+hdiutil convert "${initial_ro}" -format UDRW -o "${initial_dmg}" >/dev/null
+rm -f "${initial_ro}"
+hdiutil resize -size 100m "${initial_dmg}" >/dev/null 2>&1 || true
+
+attach_output="$(hdiutil attach -readwrite -noverify -noautoopen "${initial_dmg}")"
 device="$(printf '%s\n' "${attach_output}" | awk '/Apple_HFS/ {print $1; exit}')"
 [[ -n "${device}" ]] || die "failed to mount read-write DMG."
+
+# Copy background into mounted volume's hidden .background folder
+if [[ "${has_background}" == "1" ]]; then
+  mkdir -p "/Volumes/${volume_name}/.background"
+  cp "${bg_source}" "/Volumes/${volume_name}/.background/background.png"
+fi
 
 osascript <<EOF >/dev/null
 tell application "Finder"
     tell disk "${volume_name}"
         open
-        delay 0.2
+        delay 0.5
         set current view of container window to icon view
         set toolbar visible of container window to false
         set statusbar visible of container window to false
         set bounds of container window to {140, 120, 860, 520}
         set opts to the icon view options of container window
         set arrangement of opts to not arranged
-        set icon size of opts to 128
+        set icon size of opts to 160
         set text size of opts to 14
-        set position of item "2relay.app" of container window to {190, 250}
-        set position of item "Applications" of container window to {520, 250}
+        if ${has_background} is 1 then
+            set background picture of opts to file ".background:background.png"
+        end if
+        set position of item "2relay.app" of container window to {180, 200}
+        set position of item "Applications" of container window to {530, 200}
         update without registering applications
-        delay 0.2
+        delay 0.5
         close
     end tell
 end tell
@@ -73,7 +99,7 @@ EOF
 hdiutil detach "${device}" -quiet
 device=""
 
-hdiutil convert "${rw_dmg}" \
+hdiutil convert "${initial_dmg}" \
   -format UDZO \
   -imagekey zlib-level=9 \
   -o "${tmp_output}" \
