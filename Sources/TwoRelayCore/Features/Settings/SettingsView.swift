@@ -1,3 +1,4 @@
+import KeyboardShortcuts
 import SwiftUI
 
 struct SettingsView: View {
@@ -8,9 +9,74 @@ struct SettingsView: View {
     var onCheckForUpdates: (() -> Void)? = nil
     var onClose: (() -> Void)? = nil
 
+    @State private var licenseInput = ""
+    @State private var isActivating = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             headerRow
+
+            sectionCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("License")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(secondaryTextColor)
+                        Spacer()
+                        Text(state.licenseValidator.isLicensed ? "Active" : "Not activated")
+                            .font(.system(size: 11, weight: .semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                (state.licenseValidator.isLicensed ? Color.green : Color.orange)
+                                    .opacity(0.18),
+                                in: Capsule()
+                            )
+                            .foregroundStyle(state.licenseValidator.isLicensed ? .green : .orange)
+                    }
+
+                    if state.licenseValidator.isLicensed {
+                        Text("Your license is active. 2relay is fully unlocked.")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(mainTextColor)
+                    } else {
+                        TextField("Enter your license key", text: $licenseInput)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .padding(8)
+                            .background(mainTextColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                        if let error = state.licenseValidator.validationError {
+                            Text(error)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.red)
+                        }
+
+                        HStack(spacing: 8) {
+                            Button(isActivating ? "Activating..." : "Activate") {
+                                isActivating = true
+                                state.licenseValidator.licenseKey = licenseInput
+                                Task {
+                                    await state.licenseValidator.validate()
+                                    isActivating = false
+                                    if state.licenseValidator.isLicensed {
+                                        state.reportStatus("License activated!", level: .success)
+                                    }
+                                }
+                            }
+                            .font(.system(size: 12, weight: .semibold))
+                            .disabled(licenseInput.trimmingCharacters(in: .whitespaces).isEmpty || isActivating)
+
+                            Button("Get a license") {
+                                if let url = URL(string: "https://2relay.2eight.co") {
+                                    NSWorkspace.shared.open(url)
+                                }
+                            }
+                            .font(.system(size: 12, weight: .semibold))
+                        }
+                    }
+                }
+            }
 
             sectionCard {
                 VStack(alignment: .leading, spacing: 10) {
