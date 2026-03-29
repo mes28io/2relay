@@ -2,24 +2,7 @@ import AppKit
 import Foundation
 
 enum AppBranding {
-    static let logoFileName = "2relay-logo.png"
     static let bundledLogoName = "2relay-logo"
-    static let dockIconPackageName = "2relay-icon.icon"
-    static let dockIconAssetName = "2relay-logo.png"
-
-    static func logoFileURL() -> URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Downloads", isDirectory: true)
-            .appendingPathComponent(logoFileName, isDirectory: false)
-    }
-
-    static func dockIconAssetURL() -> URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Downloads", isDirectory: true)
-            .appendingPathComponent(dockIconPackageName, isDirectory: true)
-            .appendingPathComponent("Assets", isDirectory: true)
-            .appendingPathComponent(dockIconAssetName, isDirectory: false)
-    }
 
     static func loadLogoImage() -> NSImage? {
         if let bundledURL = Bundle.main.url(forResource: bundledLogoName, withExtension: "png"),
@@ -27,11 +10,7 @@ enum AppBranding {
             return bundledImage
         }
 
-        let url = logoFileURL()
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            return nil
-        }
-        return NSImage(contentsOf: url)
+        return nil
     }
 
     static func loadMenuBarTemplateImage() -> NSImage? {
@@ -69,21 +48,9 @@ enum AppBranding {
         return renderDockIconImage(from: copy)
     }
 
-    static func loadDockPackImage() -> NSImage? {
-        let url = dockIconAssetURL()
-        guard FileManager.default.fileExists(atPath: url.path),
-              let image = NSImage(contentsOf: url),
-              let copy = image.copy() as? NSImage else {
-            return nil
-        }
-
-        copy.isTemplate = false
-        return renderDockIconImage(from: copy)
-    }
-
     @MainActor
     static func applyDockIcon() {
-        guard let image = loadDockPackImage() ?? loadDockLogoImage() ?? loadDockWaveformImage() else {
+        guard let image = loadDockLogoImage() ?? loadDockWaveformImage() else {
             return
         }
 
@@ -103,7 +70,6 @@ enum AppBranding {
         NSColor.clear.setFill()
         rect.fill()
 
-        // Approximate macOS app icon corner radius so Dock icon does not appear as a hard square.
         let radius = rect.width * 0.215
         let clipPath = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
         clipPath.addClip()
