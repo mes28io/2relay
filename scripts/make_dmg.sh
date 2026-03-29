@@ -42,6 +42,12 @@ else
   has_background=0
 fi
 
+# Detach any existing volume with the same name
+existing_device="$(hdiutil info 2>/dev/null | awk -v vol="/Volumes/${volume_name}" '$0 ~ vol {found=1} found && /^\/dev\/disk/{print $1; exit}')"
+if [[ -n "${existing_device}" ]]; then
+  hdiutil detach "${existing_device}" -force >/dev/null 2>&1 || true
+fi
+
 rm -f "${output_dmg}" "${rw_dmg}" "${tmp_output}"
 echo "[2relay] creating DMG: ${output_dmg}"
 
