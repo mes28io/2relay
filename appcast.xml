@@ -8,11 +8,11 @@
     <description>Latest release updates for 2relay.</description>
     <language>en</language>
 <item>
-  <title>2relay 0.2.0</title>
-  <pubDate>Sun, 29 Mar 2026 16:09:41 +0000</pubDate>
-  <sparkle:version>24</sparkle:version>
-  <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
-  <enclosure url="https://github.com/mes28io/2relay/releases/download/v0.2.0/2relay-0.2.0-24.zip" length="14305319" type="application/octet-stream" sparkle:edSignature="cGvKZb0xmLa+CPEhkcRwxjEJQTcTZJ69sXneRgjCaOasdr42eLu1qI90bWtZotDuD03sZMG0tIoDFtFOMQ6eAQ==" />
+  <title>2relay 0.2.1</title>
+  <pubDate>Sun, 29 Mar 2026 17:58:35 +0000</pubDate>
+  <sparkle:version>28</sparkle:version>
+  <sparkle:shortVersionString>0.2.1</sparkle:shortVersionString>
+  <enclosure url="https://github.com/mes28io/2relay/releases/download/v0.2.1/2relay-0.2.1-28.zip" length="14304209" type="application/octet-stream" sparkle:edSignature="BExfYOCzLjYjHMP42jAoFDEj++l4E1+Pw0ztpYFV2igc1R7p8l9C8AjSGpQtCiAN15prpM8Zg+D5Kvi32yg8Aw==" />
 </item>
   </channel>
 </rss>
