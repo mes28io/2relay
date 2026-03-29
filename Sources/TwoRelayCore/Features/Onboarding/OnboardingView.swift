@@ -73,9 +73,6 @@ struct OnboardingView: View {
                 permissionCenter.refreshFromSystemAndRedirectUnrecognizedIfNeeded()
             }
         }
-        .onChange(of: state.hotkeyTrigger) { _ in
-            hotkeyPreview = currentHotkeyDisplayText
-        }
         .task(id: currentStep) {
             guard currentStep == .permissions else {
                 return
@@ -213,18 +210,6 @@ struct OnboardingView: View {
             .background(cardBackgroundColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("Input style")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(secondaryTextColor)
-
-                Picker("Hotkey mode", selection: $state.hotkeyMode) {
-                    ForEach(AppState.HotkeyMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-
                 Text("Behavior")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(secondaryTextColor)
@@ -290,32 +275,35 @@ struct OnboardingView: View {
             stepTitleCard(title: currentStep.title, subtitle: currentStep.subtitle)
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("Set your relay hotkey")
+                Text("Push-to-talk")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(secondaryTextColor)
 
-                Picker("Hotkey trigger", selection: $state.hotkeyTrigger) {
-                    ForEach(AppState.HotkeyTrigger.allCases) { trigger in
-                        Text(trigger.displayName).tag(trigger)
-                    }
-                }
-                .pickerStyle(.segmented)
+                Text("Hold Fn to record. Release to stop and transcribe.")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(mainTextColor)
+            }
+            .padding(14)
+            .background(cardBackgroundColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-                if state.hotkeyTrigger == .keyboardShortcut {
-                    Text("Tap the field, then press your preferred keys.")
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(secondaryTextColor)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Hands-free toggle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(secondaryTextColor)
 
-                    HotkeyRecorderField(name: .relayListen) { shortcut in
-                        hotkeyPreview = shortcut?.description ?? "None"
-                        state.reportStatus("Hotkey updated: \(hotkeyPreview)", level: .success)
-                    }
-                    .frame(height: 30)
-                } else {
-                    Text("Hold Fn to record. Release Fn to stop and transcribe.")
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(secondaryTextColor)
+                Text("Press once to start, press again to stop. Default: Fn+Space.")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(mainTextColor)
+
+                Text("Tap the field to customize:")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(secondaryTextColor)
+
+                HotkeyRecorderField(name: .relayListen) { shortcut in
+                    hotkeyPreview = shortcut?.description ?? "Fn+Space"
+                    state.reportStatus("Hands-free shortcut updated: \(hotkeyPreview)", level: .success)
                 }
+                .frame(height: 30)
 
                 HStack(spacing: 8) {
                     Text("Current:")
@@ -325,16 +313,6 @@ struct OnboardingView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(mainTextColor)
                 }
-
-                Button(state.hotkeyTrigger == .functionKey ? "Use keyboard shortcut instead" : "Continue with default (Control + Space)") {
-                    state.hotkeyTrigger = .keyboardShortcut
-                    KeyboardShortcuts.setShortcut(RelayHotkeyDefaults.preferred, for: .relayListen)
-                    hotkeyPreview = currentHotkeyDisplayText
-                    state.reportStatus("Hotkey updated: \(hotkeyPreview)", level: .success)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(state.hotkeyTrigger == .keyboardShortcut && isUsingDefaultHotkey)
             }
             .padding(14)
             .background(cardBackgroundColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -678,8 +656,7 @@ struct OnboardingView: View {
     }
 
     private var isUsingDefaultHotkey: Bool {
-        state.hotkeyTrigger == .keyboardShortcut
-            && KeyboardShortcuts.getShortcut(for: .relayListen) == RelayHotkeyDefaults.preferred
+        KeyboardShortcuts.getShortcut(for: .relayListen) == RelayHotkeyDefaults.handsFreeFnSpace
     }
 
     private var accentColor: Color {

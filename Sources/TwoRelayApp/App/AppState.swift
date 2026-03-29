@@ -4,7 +4,6 @@ import KeyboardShortcuts
 @MainActor
 final class AppState: ObservableObject {
     private static let onboardingCompletedDefaultsKey = "com.2relay.onboarding.completed"
-    private static let hotkeyTriggerDefaultsKey = "com.2relay.hotkey.trigger"
 
     enum StatusLevel: Equatable {
         case info
@@ -43,55 +42,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    enum HotkeyMode: String, CaseIterable, Identifiable {
-        case pushToTalk
-        case toggle
-
-        var id: String { rawValue }
-
-        var displayName: String {
-            switch self {
-            case .pushToTalk:
-                return "Push-to-talk"
-            case .toggle:
-                return "Toggle"
-            }
-        }
-    }
-
-    enum HotkeyTrigger: String, CaseIterable, Identifiable {
-        case keyboardShortcut
-        case functionKey
-
-        var id: String { rawValue }
-
-        var displayName: String {
-            switch self {
-            case .keyboardShortcut:
-                return "Shortcut"
-            case .functionKey:
-                return "Fn"
-            }
-        }
-
-        @MainActor
-        var activeDisplayName: String {
-            switch self {
-            case .keyboardShortcut:
-                return KeyboardShortcuts.getShortcut(for: .relayListen)?.description ?? "None"
-            case .functionKey:
-                return "Fn"
-            }
-        }
-    }
-
     @Published var defaultTarget: TargetApp = .clipboard
-    @Published var hotkeyMode: HotkeyMode = .pushToTalk
-    @Published var hotkeyTrigger: HotkeyTrigger = .functionKey {
-        didSet {
-            userDefaults.set(hotkeyTrigger.rawValue, forKey: Self.hotkeyTriggerDefaultsKey)
-        }
-    }
     @Published var modelPath: String = "~/models/ggml-medium.bin"
     @Published var cleanPromptEnabled: Bool = true
     @Published var launchTargetOnStartupEnabled: Bool = true
@@ -117,10 +68,6 @@ final class AppState: ObservableObject {
         self.userDefaults = userDefaults
         self.licenseValidator = LicenseValidator(userDefaults: userDefaults)
         hasCompletedOnboarding = userDefaults.bool(forKey: Self.onboardingCompletedDefaultsKey)
-        if let savedHotkeyTrigger = userDefaults.string(forKey: Self.hotkeyTriggerDefaultsKey),
-           let hotkeyTrigger = HotkeyTrigger(rawValue: savedHotkeyTrigger) {
-            self.hotkeyTrigger = hotkeyTrigger
-        }
     }
 
     func completeOnboarding() {
@@ -201,7 +148,8 @@ final class AppState: ObservableObject {
     }
 
     var activeHotkeyDisplayText: String {
-        hotkeyTrigger.activeDisplayName
+        let handsFree = KeyboardShortcuts.getShortcut(for: .relayListen)?.description ?? "Fn+Space"
+        return "Fn (hold) / \(handsFree) (toggle)"
     }
 
     func clearPendingPrompt() {

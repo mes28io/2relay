@@ -8,28 +8,18 @@ enum RelayHotkeyDefaults {
     static let systemInputSourceControlSpaceID = 60
     static let systemInputSourceControlOptionSpaceID = 61
 
+    /// Default hands-free shortcut: Fn+Space
+    static let handsFreeFnSpace = KeyboardShortcuts.Shortcut(.space, modifiers: [.function])
+
     static let preferred = KeyboardShortcuts.Shortcut(.space, modifiers: [.control])
     static let fallbackControlOption = KeyboardShortcuts.Shortcut(.space, modifiers: [.control, .option])
     static let fallbackControlShift = KeyboardShortcuts.Shortcut(.space, modifiers: [.control, .shift])
     static let fallbackCommandOption = KeyboardShortcuts.Shortcut(.space, modifiers: [.command, .option])
     static let fallbackCommandShift = KeyboardShortcuts.Shortcut(.space, modifiers: [.command, .shift])
 
-    static let legacyFunction = KeyboardShortcuts.Shortcut(.space, modifiers: [.function])
-    static let legacyOption = KeyboardShortcuts.Shortcut(.space, modifiers: [.option])
-
-    static var migratableShortcuts: [KeyboardShortcuts.Shortcut] {
-        [
-            fallbackControlOption,
-            fallbackControlShift,
-            fallbackCommandOption,
-            fallbackCommandShift,
-            legacyFunction,
-            legacyOption
-        ]
-    }
-
     static var fallbackCandidates: [KeyboardShortcuts.Shortcut] {
         [
+            handsFreeFnSpace,
             fallbackControlOption,
             fallbackControlShift,
             fallbackCommandOption,
@@ -39,9 +29,10 @@ enum RelayHotkeyDefaults {
 }
 
 extension KeyboardShortcuts.Name {
+    /// Hands-free toggle shortcut (default: Fn+Space)
     static let relayListen = Self(
         "relayListen",
-        default: RelayHotkeyDefaults.preferred
+        default: RelayHotkeyDefaults.handsFreeFnSpace
     )
 }
 
@@ -396,6 +387,8 @@ private final class FunctionKeyMonitor {
     }
 }
 
+// MARK: - HotkeyManager
+
 @MainActor
 final class HotkeyManager: ObservableObject {
     private enum RegistrationReason {
@@ -406,47 +399,54 @@ final class HotkeyManager: ObservableObject {
 
     private let appState: AppState
     private let instanceID = UUID().uuidString.prefix(8)
+
+    // Push-to-talk: Fn key hold (always active)
+    private var functionKeyMonitor: FunctionKeyMonitor!
+    private var fnKeyIsHeld = false
+
+    // Hands-free toggle: configurable shortcut (default Fn+Space)
     private var hotkeyMonitor: CarbonHotkeyMonitor!
     private var keyEventFallbackMonitor: KeyEventFallbackMonitor!
-    private var functionKeyMonitor: FunctionKeyMonitor!
-    private var keyIsHeld = false
+    private var toggleKeyIsHeld = false
     private var toggleListening = false
-    private var isRecorderActive = false
     private var lastRegisteredShortcut: KeyboardShortcuts.Shortcut?
+
+    private var isRecorderActive = false
     private var cancellables = Set<AnyCancellable>()
 
     init(appState: AppState) {
         self.appState = appState
         print("[2relay] hotkey manager init: \(instanceID)")
-        hotkeyMonitor = CarbonHotkeyMonitor(
+
+        // Push-to-talk via Fn hold
+        functionKeyMonitor = FunctionKeyMonitor(
             onKeyDown: { [weak self] in
-                self?.handleKeyDown()
+                self?.handleFnDown()
             },
             onKeyUp: { [weak self] in
-                self?.handleKeyUp()
+                self?.handleFnUp()
+            }
+        )
+
+        // Hands-free toggle via configurable shortcut
+        hotkeyMonitor = CarbonHotkeyMonitor(
+            onKeyDown: { [weak self] in
+                self?.handleToggleDown()
+            },
+            onKeyUp: { [weak self] in
+                self?.handleToggleUp()
             }
         )
         keyEventFallbackMonitor = KeyEventFallbackMonitor(
             onKeyDown: { [weak self] in
-                self?.handleKeyDown()
+                self?.handleToggleDown()
             },
             onKeyUp: { [weak self] in
-                self?.handleKeyUp()
-            }
-        )
-        functionKeyMonitor = FunctionKeyMonitor(
-            onKeyDown: { [weak self] in
-                self?.handleKeyDown()
-            },
-            onKeyUp: { [weak self] in
-                self?.handleKeyUp()
+                self?.handleToggleUp()
             }
         )
 
-        migrateShortcutIfNeeded()
-        registerCurrentShortcut(reason: .startup)
-        bindModeChanges()
-        bindTriggerChanges()
+        registerAll(reason: .startup)
         bindShortcutChanges()
         bindRecorderActivity()
         bindLifecycleChanges()
@@ -456,52 +456,24 @@ final class HotkeyManager: ObservableObject {
         print("[2relay] hotkey manager deinit: \(instanceID)")
     }
 
-    private func migrateShortcutIfNeeded() {
-        let current = KeyboardShortcuts.getShortcut(for: .relayListen)
-        if current == nil
-            || RelayHotkeyDefaults.migratableShortcuts.contains(where: { $0 == current }) {
-            KeyboardShortcuts.setShortcut(RelayHotkeyDefaults.preferred, for: .relayListen)
-            appState.reportStatus("Hotkey default set to \(RelayHotkeyDefaults.preferred.description).", level: .info)
-        }
+    // MARK: - Registration
+
+    private func registerAll(reason: RegistrationReason) {
+        releaseAllHeldKeys()
+
+        // Always start Fn push-to-talk monitor
+        functionKeyMonitor.start()
+
+        // Register the hands-free toggle shortcut
+        registerHandsFreeShortcut(reason: reason)
     }
 
-    private func registerCurrentShortcut(reason: RegistrationReason) {
-        releaseHeldHotkeyIfNeeded()
+    private func registerHandsFreeShortcut(reason: RegistrationReason) {
+        let selectedShortcut = KeyboardShortcuts.getShortcut(for: .relayListen)
+            ?? RelayHotkeyDefaults.handsFreeFnSpace
 
-        if appState.hotkeyTrigger == .functionKey {
-            hotkeyMonitor.unregister()
-            keyEventFallbackMonitor.stop()
-            functionKeyMonitor.start()
-            lastRegisteredShortcut = nil
-
-            if reason == .preferencesChange {
-                appState.reportStatus("Hotkey updated: Fn", level: .success)
-            }
-            return
-        }
-
-        functionKeyMonitor.stop()
-
-        var selectedShortcut = KeyboardShortcuts.getShortcut(for: .relayListen) ?? RelayHotkeyDefaults.preferred
         if KeyboardShortcuts.getShortcut(for: .relayListen) == nil {
             KeyboardShortcuts.setShortcut(selectedShortcut, for: .relayListen)
-        }
-
-        if hotkeyConflictsWithSystemShortcut(selectedShortcut),
-           let nonConflictingFallback = RelayHotkeyDefaults.fallbackCandidates.first(where: {
-               $0 != selectedShortcut && !hotkeyConflictsWithSystemShortcut($0)
-           }) {
-            let conflictingShortcut = selectedShortcut
-            selectedShortcut = nonConflictingFallback
-            KeyboardShortcuts.setShortcut(selectedShortcut, for: .relayListen)
-            lastRegisteredShortcut = nil
-            print(
-                "[2relay] selected hotkey \(conflictingShortcut.description) conflicts with macOS input source shortcuts; switched to \(selectedShortcut.description)"
-            )
-            appState.reportStatus(
-                "Hotkey \(conflictingShortcut.description) conflicts with macOS input source shortcuts. Switched to \(selectedShortcut.description).",
-                level: .warning
-            )
         }
 
         if selectedShortcut == lastRegisteredShortcut, reason == .preferencesChange {
@@ -513,54 +485,93 @@ final class HotkeyManager: ObservableObject {
         let status = hotkeyMonitor.register(shortcut: selectedShortcut)
         if status == noErr {
             lastRegisteredShortcut = selectedShortcut
-            print("[2relay] hotkey registered (\(hotkeyMonitor.activeTargetLabel)): \(selectedShortcut.description)")
+            print("[2relay] hands-free hotkey registered (\(hotkeyMonitor.activeTargetLabel)): \(selectedShortcut.description)")
             if reason == .preferencesChange {
-                appState.reportStatus("Hotkey updated: \(selectedShortcut.description)", level: .success)
+                appState.reportStatus("Hands-free shortcut updated: \(selectedShortcut.description)", level: .success)
             }
             return
         }
 
-        print("[2relay] hotkey registration failed for \(selectedShortcut.description): \(status)")
+        print("[2relay] hands-free hotkey registration failed for \(selectedShortcut.description): \(status)")
 
+        // Try fallbacks
         for fallback in RelayHotkeyDefaults.fallbackCandidates where fallback != selectedShortcut {
-            if hotkeyConflictsWithSystemShortcut(fallback) {
-                print("[2relay] skipping fallback \(fallback.description) due to macOS input source shortcut conflict")
-                continue
-            }
-
             let fallbackStatus = hotkeyMonitor.register(shortcut: fallback)
             if fallbackStatus == noErr {
                 KeyboardShortcuts.setShortcut(fallback, for: .relayListen)
                 lastRegisteredShortcut = fallback
                 keyEventFallbackMonitor.start(shortcut: fallback)
-                print("[2relay] hotkey fallback registered (\(hotkeyMonitor.activeTargetLabel)): \(fallback.description)")
+                print("[2relay] hands-free hotkey fallback registered (\(hotkeyMonitor.activeTargetLabel)): \(fallback.description)")
                 appState.reportStatus(
-                    "Hotkey \(selectedShortcut.description) is unavailable on this Mac. Switched to \(fallback.description).",
+                    "Shortcut \(selectedShortcut.description) unavailable. Using \(fallback.description) instead.",
                     level: .warning
                 )
                 return
             }
-
-            print("[2relay] hotkey fallback registration failed for \(fallback.description): \(fallbackStatus)")
         }
 
         hotkeyMonitor.unregister()
         keyEventFallbackMonitor.stop()
-        print("[2relay] no global hotkey could be registered")
+        print("[2relay] no hands-free hotkey could be registered")
         appState.reportStatus(
-            "Could not register a global hotkey. Choose another shortcut in Settings > Shortcuts.",
+            "Could not register hands-free shortcut. Choose another in Settings > Shortcuts.",
             level: .error
         )
     }
 
-    private func bindTriggerChanges() {
-        appState.$hotkeyTrigger
-            .removeDuplicates()
-            .sink { [weak self] _ in
-                self?.registerCurrentShortcut(reason: .preferencesChange)
-            }
-            .store(in: &cancellables)
+    // MARK: - Push-to-talk (Fn hold)
+
+    private func handleFnDown() {
+        guard !isRecorderActive, !fnKeyIsHeld else { return }
+        fnKeyIsHeld = true
+        print("[2relay] Fn down (push-to-talk)")
+        appState.startListening()
     }
+
+    private func handleFnUp() {
+        guard !isRecorderActive, fnKeyIsHeld else { return }
+        fnKeyIsHeld = false
+        print("[2relay] Fn up (push-to-talk)")
+        appState.stopListening()
+    }
+
+    // MARK: - Hands-free toggle (configurable shortcut)
+
+    private func handleToggleDown() {
+        guard !isRecorderActive, !toggleKeyIsHeld else { return }
+        toggleKeyIsHeld = true
+        print("[2relay] toggle key down (hands-free)")
+    }
+
+    private func handleToggleUp() {
+        guard !isRecorderActive, toggleKeyIsHeld else { return }
+        toggleKeyIsHeld = false
+        print("[2relay] toggle key up (hands-free)")
+
+        if toggleListening {
+            appState.stopListening()
+        } else {
+            appState.startListening()
+        }
+        toggleListening.toggle()
+    }
+
+    // MARK: - Key release safety
+
+    private func releaseAllHeldKeys() {
+        if fnKeyIsHeld {
+            fnKeyIsHeld = false
+            if appState.isListening {
+                appState.stopListening()
+            }
+        }
+        if toggleKeyIsHeld {
+            toggleKeyIsHeld = false
+        }
+        toggleListening = false
+    }
+
+    // MARK: - Bindings
 
     private func bindShortcutChanges() {
         let shortcutChangeNotification = Notification.Name("KeyboardShortcuts_shortcutByNameDidChange")
@@ -579,7 +590,7 @@ final class HotkeyManager: ObservableObject {
             .merge(with: userDefaultsChanges)
             .debounce(for: .milliseconds(120), scheduler: RunLoop.main)
             .sink { [weak self] in
-                self?.registerCurrentShortcut(reason: .preferencesChange)
+                self?.registerHandsFreeShortcut(reason: .preferencesChange)
             }
             .store(in: &cancellables)
     }
@@ -599,169 +610,40 @@ final class HotkeyManager: ObservableObject {
         NotificationCenter.default.publisher(for: NSApplication.didFinishLaunchingNotification)
             .merge(with: NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
             .sink { [weak self] _ in
-                self?.registerCurrentShortcut(reason: .lifecycleRecovery)
+                self?.registerAll(reason: .lifecycleRecovery)
             }
             .store(in: &cancellables)
 
         NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)
             .sink { [weak self] _ in
-                self?.registerCurrentShortcut(reason: .lifecycleRecovery)
+                self?.registerAll(reason: .lifecycleRecovery)
             }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)
             .sink { [weak self] _ in
-                self?.releaseHeldHotkeyIfNeeded()
+                self?.releaseAllHeldKeys()
             }
             .store(in: &cancellables)
 
         NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.willSleepNotification)
             .sink { [weak self] _ in
-                self?.releaseHeldHotkeyIfNeeded()
+                self?.releaseAllHeldKeys()
             }
             .store(in: &cancellables)
-    }
-
-    private func bindModeChanges() {
-        appState.$hotkeyMode
-            .removeDuplicates()
-            .sink { [weak self] _ in
-                self?.modeDidChange()
-            }
-            .store(in: &cancellables)
-    }
-
-    func modeDidChange() {
-        if appState.hotkeyMode == .pushToTalk && toggleListening {
-            toggleListening = false
-            appState.stopListening()
-        }
-    }
-
-    private func handleKeyDown() {
-        guard !isRecorderActive else {
-            return
-        }
-
-        guard !keyIsHeld else {
-            return
-        }
-
-        keyIsHeld = true
-        print("[2relay] hotkey down")
-
-        if appState.hotkeyMode == .pushToTalk {
-            appState.startListening()
-        }
-    }
-
-    private func handleKeyUp() {
-        guard !isRecorderActive else {
-            return
-        }
-
-        guard keyIsHeld else {
-            return
-        }
-
-        defer {
-            keyIsHeld = false
-        }
-        print("[2relay] hotkey up")
-
-        switch appState.hotkeyMode {
-        case .pushToTalk:
-            appState.stopListening()
-        case .toggle:
-            if toggleListening {
-                appState.stopListening()
-            } else {
-                appState.startListening()
-            }
-            toggleListening.toggle()
-        }
-    }
-
-    private func releaseHeldHotkeyIfNeeded() {
-        guard keyIsHeld else {
-            return
-        }
-
-        keyIsHeld = false
-        if appState.isListening {
-            appState.stopListening()
-        }
     }
 
     private func setRecorderActive(_ isActive: Bool) {
-        guard isRecorderActive != isActive else {
-            return
-        }
-
+        guard isRecorderActive != isActive else { return }
         isRecorderActive = isActive
 
         if isActive {
-            releaseHeldHotkeyIfNeeded()
+            releaseAllHeldKeys()
             hotkeyMonitor.unregister()
             keyEventFallbackMonitor.stop()
             functionKeyMonitor.stop()
         } else {
-            registerCurrentShortcut(reason: .preferencesChange)
+            registerAll(reason: .preferencesChange)
         }
-    }
-
-    private func hotkeyConflictsWithSystemShortcut(_ shortcut: KeyboardShortcuts.Shortcut) -> Bool {
-        if symbolicSystemShortcuts().contains(shortcut) {
-            return true
-        }
-
-        if shortcut == RelayHotkeyDefaults.preferred {
-            return symbolicHotkeyEnabled(RelayHotkeyDefaults.systemInputSourceControlSpaceID)
-        }
-
-        if shortcut == RelayHotkeyDefaults.fallbackControlOption {
-            return symbolicHotkeyEnabled(RelayHotkeyDefaults.systemInputSourceControlOptionSpaceID)
-        }
-
-        return false
-    }
-
-    private func symbolicSystemShortcuts() -> [KeyboardShortcuts.Shortcut] {
-        var shortcutsUnmanaged: Unmanaged<CFArray>?
-        guard CopySymbolicHotKeys(&shortcutsUnmanaged) == noErr,
-              let shortcuts = shortcutsUnmanaged?.takeRetainedValue() as? [[String: Any]] else {
-            return []
-        }
-
-        return shortcuts.compactMap { shortcutInfo in
-            guard (shortcutInfo[kHISymbolicHotKeyEnabled] as? Bool) == true,
-                  let keyCode = shortcutInfo[kHISymbolicHotKeyCode] as? Int,
-                  let modifiers = shortcutInfo[kHISymbolicHotKeyModifiers] as? Int else {
-                return nil
-            }
-
-            return KeyboardShortcuts.Shortcut(
-                carbonKeyCode: keyCode,
-                carbonModifiers: modifiers
-            )
-        }
-    }
-
-    private func symbolicHotkeyEnabled(_ keyID: Int) -> Bool {
-        guard let defaults = UserDefaults(suiteName: "com.apple.symbolichotkeys"),
-              let hotkeys = defaults.dictionary(forKey: "AppleSymbolicHotKeys"),
-              let hotkey = hotkeys["\(keyID)"] as? [String: Any] else {
-            return false
-        }
-
-        if let enabled = hotkey["enabled"] as? Bool {
-            return enabled
-        }
-
-        if let enabled = hotkey["enabled"] as? NSNumber {
-            return enabled.boolValue
-        }
-
-        return false
     }
 }

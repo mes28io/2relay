@@ -7,8 +7,6 @@ final class AppStateTests: XCTestCase {
         let state = AppState()
 
         XCTAssertEqual(state.defaultTarget, .clipboard)
-        XCTAssertEqual(state.hotkeyMode, .pushToTalk)
-        XCTAssertEqual(state.hotkeyTrigger, .functionKey)
         XCTAssertEqual(state.modelPath, "~/models/ggml-medium.bin")
         XCTAssertTrue(state.cleanPromptEnabled)
         XCTAssertTrue(state.launchTargetOnStartupEnabled)

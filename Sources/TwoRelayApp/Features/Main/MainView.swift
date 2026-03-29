@@ -1,4 +1,5 @@
 import AppKit
+import KeyboardShortcuts
 import SwiftUI
 
 private enum SidebarTab: String, CaseIterable, Identifiable {
@@ -621,49 +622,59 @@ struct MainView: View {
     }
 
     private var shortcutsHotkeyCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Hotkey")
-                .font(.title3.weight(.medium))
+        VStack(alignment: .leading, spacing: 14) {
+            // Push-to-talk section
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Push-to-talk")
+                    .font(.title3.weight(.medium))
 
-            Picker("Hotkey trigger", selection: $state.hotkeyTrigger) {
-                ForEach(AppState.HotkeyTrigger.allCases) { trigger in
-                    Text(trigger.displayName).tag(trigger)
+                Text("Hold Fn to record. Release to stop and transcribe.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(secondaryTextColor)
+
+                HStack(spacing: 8) {
+                    Text("Shortcut:")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(secondaryTextColor)
+                    Text("Fn (hold)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(mainTextColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(mainTextColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
 
-            Picker("Hotkey mode", selection: $state.hotkeyMode) {
-                ForEach(AppState.HotkeyMode.allCases) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
+            Divider()
+                .opacity(0.5)
 
-            if state.hotkeyTrigger == .keyboardShortcut {
-                Text("Tap the field, then press your shortcut keys.")
+            // Hands-free toggle section
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Hands-free")
+                    .font(.title3.weight(.medium))
+
+                Text("Press to start listening. Press again to stop. No need to hold.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(secondaryTextColor)
+
+                Text("Tap the field below to set your shortcut.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(secondaryTextColor)
 
                 HotkeyRecorderField(name: .relayListen) { shortcut in
                     let shortcutText = shortcut?.description ?? "None"
-                    state.reportStatus("Hotkey updated: \(shortcutText)", level: .success)
+                    state.reportStatus("Hands-free shortcut updated: \(shortcutText)", level: .success)
                 }
                 .frame(height: 28)
-            } else {
-                Text("Hold Fn to record. Release Fn to stop and transcribe.")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(secondaryTextColor)
-            }
 
-            HStack(spacing: 8) {
-                Text("Current:")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(secondaryTextColor)
-                Text(state.activeHotkeyDisplayText)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(mainTextColor)
+                HStack(spacing: 8) {
+                    Text("Current:")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(secondaryTextColor)
+                    Text(KeyboardShortcuts.getShortcut(for: .relayListen)?.description ?? "Fn+Space")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(mainTextColor)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
