@@ -82,21 +82,28 @@ final class LicenseValidator: ObservableObject {
         let storedKey = userDefaults.string(forKey: Self.licenseKeyDefaultsKey) ?? ""
         guard !storedKey.isEmpty else { return }
 
+        let hasExistingValidToken: Bool = {
+            guard let token = userDefaults.string(forKey: Self.licenseTokenDefaultsKey) else { return false }
+            return Self.verifySignature(of: token)
+        }()
+
         do {
             let response = try await callValidationAPI(key: storedKey)
 
             if response.valid, let token = response.token, Self.verifySignature(of: token) {
-                // Fresh token — store it
+                // Fresh token from server — store it
                 userDefaults.set(token, forKey: Self.licenseTokenDefaultsKey)
                 isLicensed = true
-            } else if !response.valid {
-                // Server explicitly says invalid — key was revoked (chargeback)
-                userDefaults.removeObject(forKey: Self.licenseTokenDefaultsKey)
+            } else if !response.valid, !hasExistingValidToken {
+                // Server says invalid AND we don't have a valid signed token locally.
+                // This means the key was never valid or was revoked.
                 isLicensed = false
             }
+            // If server says invalid but we DO have a valid signed token,
+            // keep the existing token. The cryptographic signature is proof
+            // enough — this handles owner keys and offline-activated keys.
         } catch {
             // Network error — do nothing. Existing token stays valid.
-            // This is a lifetime license; offline use is fine.
         }
     }
 
