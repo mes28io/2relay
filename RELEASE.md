@@ -1,107 +1,52 @@
-# 2relay Release Checklist (GitHub ZIP + curl installer)
+# 2relay Release
 
-Project and target:
-- Project: `/Users/mdapro/Desktop/2relay/mac-app/2relay.xcodeproj`
-- Scheme: `2relay`
-- Bundle id (placeholder): `dev.tworelay.app`
-- Primary distribution: GitHub Release zip + `scripts/install.sh`
-- In-app updates: Sparkle feed served from GitHub Raw `appcast.xml`
-
-## 1) One-time setup
-
-1. Generate/refresh the wrapper project:
-```bash
-cd /Users/mdapro/Desktop/2relay/mac-app
-xcodegen generate
-```
-2. In Xcode, open target `2relay` and confirm:
-- Signing (Release): `Developer ID Application`
-- Hardened Runtime: enabled
-- Skip Install: `NO`
-- Shared scheme: `2relay`
-
-## 2) Build release app
+## One-command release
 
 ```bash
-cd /Users/mdapro/Desktop/2relay
-TWORELAY_MARKETING_VERSION=0.1.8 ./scripts/build_release.sh
+./scripts/release.sh 0.2.0
 ```
 
-Expected output:
-- `dist/export/2relay.app`
+This single command:
+1. Builds the `.app` bundle via Xcode
+2. Creates the release zip (for curl installer)
+3. Creates the Sparkle update zip (for in-app updates)
+4. Creates the DMG installer
+5. Uploads all assets to a new GitHub Release
+6. Updates `appcast.xml` for Sparkle
+7. Commits and pushes the updated appcast
 
-## 3) Build GitHub release artifacts for curl installer
+After running, existing users will see the update via **Check for Updates** in the app.
+
+## Requirements
+
+- Xcode with Developer ID signing configured
+- `gh` CLI authenticated (`gh auth login`)
+- Sparkle private key at `~/.config/2relay/sparkle_ed25519_key`
+
+## For unsigned local testing
 
 ```bash
+ALLOW_UNSIGNED_BUILD=1 ./scripts/build_release.sh
+open dist/export/2relay.app
+```
+
+## Manual steps (if needed)
+
+```bash
+# Build only
+TWORELAY_MARKETING_VERSION=0.2.0 ./scripts/build_release.sh
+
+# Package only
 ./scripts/make_release_zip.sh
 ./scripts/make_update_zip.sh dist/export/2relay.app
-```
+./scripts/make_dmg.sh
 
-Expected outputs:
-- `dist/2relay-macos.zip`
-- `dist/2relay-macos.zip.sha256`
-- `dist/updates/2relay-0.1.8-<build>.zip`
+# Upload to GitHub
+gh release create v0.2.0 dist/2relay-macos.zip dist/2relay-macos.zip.sha256 dist/2relay.dmg
 
-## 4) Publish GitHub release
-
-Create a GitHub Release (for example tag `v0.1.8`) and upload:
-- `dist/2relay-macos.zip`
-- `dist/2relay-macos.zip.sha256`
-- `dist/updates/2relay-0.1.8-<build>.zip`
-
-Then refresh the Sparkle feed:
-
-```bash
-DOWNLOAD_BASE_URL="https://github.com/mes28io/2relay/releases/download/v0.1.8" \
+# Update appcast
+DOWNLOAD_BASE_URL="https://github.com/mes28io/2relay/releases/download/v0.2.0" \
 APPCAST_BASE_URL="https://raw.githubusercontent.com/mes28io/2relay/main" \
 SPARKLE_PRIVATE_KEY_PATH="$HOME/.config/2relay/sparkle_ed25519_key" \
-./scripts/write_appcast.sh dist/updates/2relay-0.1.8-<build>.zip dist/export/2relay.app
+./scripts/write_appcast.sh dist/updates/2relay-*.zip dist/export/2relay.app
 ```
-
-Commit the updated `appcast.xml` to `main` after the release assets are live.
-
-Installer command users run:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mes28io/2relay/main/scripts/install.sh | bash
-```
-
-This installs the latest GitHub Release, not unreleased commits on `main`.
-
-Install a specific tag:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mes28io/2relay/main/scripts/install.sh | TWORELAY_VERSION=v0.1.0 bash
-```
-
-## 5) Verification commands
-
-```bash
-codesign --verify --deep --strict --verbose=2 dist/export/2relay.app
-spctl --assess --type execute -vv dist/export/2relay.app
-shasum -a 256 dist/2relay-macos.zip
-cat dist/2relay-macos.zip.sha256
-```
-
-## Optional: DMG flow (legacy)
-
-If you still need DMG distribution:
-
-```bash
-./scripts/make_dmg.sh
-./scripts/notarize_dmg.sh dist/2relay.dmg
-```
-
-## Common pitfalls
-
-1. Archive fails with “requires a development team”:
-- Set `TEAM_ID` in shell or set Team in Xcode target Signing settings.
-2. `dist/export/2relay.app` is missing:
-- Confirm archive succeeded and contains `Products/Applications/2relay.app`.
-3. `curl` installer fails with 404:
-- Ensure the release includes both `2relay-macos.zip` and `2relay-macos.zip.sha256`.
-- Ensure `scripts/install.sh` default repo matches your GitHub repo.
-4. `spctl` says app is rejected:
-- App is signed but not notarized/stapled; notarize the app artifact before release if you want best Gatekeeper UX.
-5. You only want to test archive/export paths locally:
-- Run `ALLOW_UNSIGNED_BUILD=1 ./scripts/build_release.sh` (local verification only, not shippable).
