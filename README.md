@@ -1,24 +1,49 @@
 # 2relay
 
-2relay is a macOS voice-to-prompt relay app for coding workflows.
+Voice-to-prompt relay for macOS. Speak naturally in any language, get clean English prompts pasted into any app.
 
-## Install (curl)
+## How it works
+
+| Step | What happens |
+|------|-------------|
+| **Hold Fn** | Push-to-talk: recording starts |
+| **Release Fn** | Recording stops, Whisper transcribes locally |
+| **Auto-paste** | Clean prompt is pasted into your focused app |
+
+There's also a **hands-free mode** (Fn+Space by default) — press once to start, press again to stop. Customizable in Settings > Shortcuts.
+
+## Features
+
+- **100% local** — Whisper runs on-device, audio never leaves your Mac
+- **Any language in, English out** — speak in your native language, get English prompts
+- **Paste anywhere** — auto-pastes into your editor, terminal, browser, or any focused app
+- **Auto-cleanup** — removes fillers, stutters, and repetitions
+- **Dual shortcuts** — Fn (push-to-talk) + Fn+Space (hands-free toggle)
+- **Menu bar app** — lives in your menu bar, no dock clutter
+
+## Install
+
+### curl (recommended)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mes28io/2relay/main/scripts/install.sh | bash
 ```
 
-This installs the latest GitHub Release, not unreleased commits on `main`.
+### DMG
 
-Optional environment variables:
+Download the latest `.dmg` from [Releases](https://github.com/mes28io/2relay/releases), open it, and drag 2relay to Applications.
 
-- `TWORELAY_VERSION=v0.1.0` to install a specific tag instead of latest release.
-- `TWORELAY_INSTALL_DIR="$HOME/Applications"` to pick a custom destination.
-- `TWORELAY_REPO="owner/repo"` if you fork the project.
+### Requirements
 
-## License
+- macOS 13+
+- A [license key](https://2relay.2eight.co) ($8.90 one-time, lifetime)
+- Whisper model file at `~/models/ggml-medium.bin`
 
-This project is open source under the MIT License. See [LICENSE](LICENSE).
+## License key
+
+2relay is open source but requires a license key to use. Get one at [2relay.2eight.co](https://2relay.2eight.co) for $8.90 (one-time, lifetime). Enter the key during the app's setup flow.
+
+The license is verified via Ed25519 signed tokens — your key is validated once online, then works offline forever.
 
 ## Development
 
@@ -27,38 +52,34 @@ swift build
 swift test
 ```
 
-Run app:
+The app runs as a proper `.app` bundle built via the Xcode project at `mac-app/2relay.xcodeproj`. Running `swift run` launches a terminal process (not the full app experience).
+
+## Building a release
 
 ```bash
-swift run TwoRelay
-```
+# Build the .app bundle
+TWORELAY_MARKETING_VERSION=0.2.0 ./scripts/build_release.sh
 
-## Release Artifacts (for curl installer)
-
-```bash
-TWORELAY_MARKETING_VERSION=0.1.8 ./scripts/build_release.sh
+# Create release zip for GitHub
 ./scripts/make_release_zip.sh
+
+# Create DMG installer
+./scripts/make_dmg.sh
 ```
 
-Upload both files from `dist/` to the GitHub Release:
+Upload `dist/2relay-macos.zip` and `dist/2relay-macos.zip.sha256` to the GitHub Release.
 
-- `2relay-macos.zip`
-- `2relay-macos.zip.sha256`
+## Project structure
 
-## App Updates
-
-Release builds can use Sparkle for in-app update checks. The app now reads its feed from:
-
-- [appcast.xml](https://raw.githubusercontent.com/mes28io/2relay/main/appcast.xml)
-
-To publish a new appcast entry for a release:
-
-```bash
-TWORELAY_MARKETING_VERSION=0.1.8 ./scripts/build_release.sh
-./scripts/make_release_zip.sh
-./scripts/make_update_zip.sh dist/export/2relay.app
-DOWNLOAD_BASE_URL="https://github.com/mes28io/2relay/releases/download/v0.1.8" \
-APPCAST_BASE_URL="https://raw.githubusercontent.com/mes28io/2relay/main" \
-SPARKLE_PRIVATE_KEY_PATH="$HOME/.config/2relay/sparkle_ed25519_key" \
-./scripts/write_appcast.sh dist/updates/2relay-0.1.8-$(git rev-list --count HEAD).zip dist/export/2relay.app
 ```
+Sources/
+  TwoRelayCore/     Shared library (hotkeys, audio, whisper, UI)
+  TwoRelayApp/      App wrapper (mirrors TwoRelayCore)
+mac-app/            Xcode project (XcodeGen)
+scripts/            Build, release, and install scripts
+Tests/              Unit tests
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
