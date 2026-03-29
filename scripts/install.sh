@@ -120,51 +120,6 @@ ditto "${source_app}" "${dest_app}"
 
 xattr -dr com.apple.quarantine "${dest_app}" >/dev/null 2>&1 || true
 
-bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${dest_app}/Contents/Info.plist" 2>/dev/null || true)"
-hotkey_json_control='{"carbonKeyCode":49,"carbonModifiers":4096}'
-hotkey_json_control_option='{"carbonKeyCode":49,"carbonModifiers":6144}'
-hotkey_json_control_shift='{"carbonKeyCode":49,"carbonModifiers":4608}'
-hotkey_json="${hotkey_json_control}"
-hotkey_label="Control + Space"
-
-if [[ "${TWORELAY_DISABLE_INPUT_SOURCE_SHORTCUTS:-1}" == "1" ]]; then
-  disabled_any=0
-  if symbolic_hotkey_enabled 60; then
-    disable_symbolic_hotkey 60 && disabled_any=1
-  fi
-  if symbolic_hotkey_enabled 61; then
-    disable_symbolic_hotkey 61 && disabled_any=1
-  fi
-
-  if [[ "${disabled_any}" == "1" ]]; then
-    killall cfprefsd >/dev/null 2>&1 || true
-    echo "[2relay] disabled macOS Input Source shortcuts to free Control + Space"
-  fi
-elif symbolic_hotkey_enabled 60; then
-  if symbolic_hotkey_enabled 61; then
-    hotkey_json="${hotkey_json_control_shift}"
-    hotkey_label="Control + Shift + Space"
-  else
-    hotkey_json="${hotkey_json_control_option}"
-    hotkey_label="Control + Option + Space"
-  fi
-fi
-
-if [[ -n "${bundle_id}" ]]; then
-  if [[ "${TWORELAY_FORCE_DEFAULT_HOTKEY:-0}" == "1" ]]; then
-    defaults write "${bundle_id}" KeyboardShortcuts_relayListen -string "${hotkey_json_control}"
-    echo "[2relay] preset hotkey: Control + Space (forced)"
-  else
-    if ! defaults read "${bundle_id}" KeyboardShortcuts_relayListen >/dev/null 2>&1; then
-      defaults write "${bundle_id}" KeyboardShortcuts_relayListen -string "${hotkey_json}"
-      echo "[2relay] preset hotkey: ${hotkey_label}"
-      if [[ "${hotkey_label}" != "Control + Space" ]]; then
-        echo "[2relay] note: macOS reserves Control + Space by default on this Mac."
-      fi
-    fi
-  fi
-fi
-
 echo "[2relay] installed: ${dest_app}"
 echo "[2relay] release: ${resolved_version}"
 
@@ -175,4 +130,4 @@ fi
 
 echo
 echo "done."
-echo "hotkey default is ${hotkey_label}."
+echo "shortcuts: Fn (push-to-talk) / Fn+Space (hands-free toggle)"
