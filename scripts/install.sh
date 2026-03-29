@@ -120,6 +120,12 @@ ditto "${source_app}" "${dest_app}"
 
 xattr -dr com.apple.quarantine "${dest_app}" >/dev/null 2>&1 || true
 
+# Register with Launch Services so Finder picks up the app icon
+/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f -R -trusted "${dest_app}" >/dev/null 2>&1 || true
+
+# Touch the app to invalidate icon cache
+touch "${dest_app}" >/dev/null 2>&1 || true
+
 echo "[2relay] installed: ${dest_app}"
 echo "[2relay] release: ${resolved_version}"
 
