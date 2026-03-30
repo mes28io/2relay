@@ -5,6 +5,8 @@ struct SettingsView: View {
     @ObservedObject var state: AppState
     @ObservedObject var permissionCenter: PermissionCenter
     var canCheckForUpdates: Bool = false
+    var updateAvailable: Bool = false
+    var latestVersionString: String? = nil
     var updatesDisabledReason: String? = nil
     var onCheckForUpdates: (() -> Void)? = nil
     var onClose: (() -> Void)? = nil
@@ -110,16 +112,26 @@ struct SettingsView: View {
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(secondaryTextColor)
                         Spacer()
-                        if canCheckForUpdates {
-                            Button("Restart to Update") {
+                        if updateAvailable {
+                            Button("Update & Restart") {
+                                onCheckForUpdates?()
+                            }
+                            .font(.system(size: 12, weight: .semibold))
+                            .buttonStyle(.borderedProminent)
+                        } else if canCheckForUpdates {
+                            Button("Check for Updates") {
                                 onCheckForUpdates?()
                             }
                             .font(.system(size: 12, weight: .semibold))
                         }
                     }
 
-                    if canCheckForUpdates {
-                        Text("Click the button to check for updates. If a newer version is available, it will be downloaded and the app will restart automatically.")
+                    if updateAvailable, let version = latestVersionString {
+                        Text("Version \(version) is available. Click Update & Restart to install.")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(mainTextColor)
+                    } else if canCheckForUpdates {
+                        Text("You're on the latest version.")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(mainTextColor)
                     } else {

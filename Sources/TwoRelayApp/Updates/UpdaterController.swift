@@ -72,16 +72,26 @@ struct SparkleConfiguration {
 }
 
 @MainActor
-final class UpdaterController: ObservableObject {
+final class UpdaterController: NSObject, ObservableObject, @preconcurrency SPUUpdaterDelegate {
     @Published private(set) var canCheckForUpdates = false
     @Published private(set) var updateAvailable = false
+    @Published private(set) var latestVersionString: String?
     @Published private(set) var configurationErrorMessage: String?
 
     private var updaterController: SPUStandardUpdaterController?
     private var canCheckObservation: NSKeyValueObservation?
-    private var checkTimer: Timer?
 
-    init(bundle: Bundle = .main) {
+    override init() {
+        super.init()
+        setup(bundle: .main)
+    }
+
+    init(bundle: Bundle) {
+        super.init()
+        setup(bundle: bundle)
+    }
+
+    private func setup(bundle: Bundle) {
         do {
             _ = try SparkleConfiguration.load(from: bundle)
         } catch {
@@ -93,7 +103,7 @@ final class UpdaterController: ObservableObject {
 
         let updaterController = SPUStandardUpdaterController(
             startingUpdater: false,
-            updaterDelegate: nil,
+            updaterDelegate: self,
             userDriverDelegate: nil
         )
         self.updaterController = updaterController
@@ -109,42 +119,44 @@ final class UpdaterController: ObservableObject {
 
         updaterController.startUpdater()
 
-        // Check for updates silently on launch after a short delay
+        // Silent background check on launch
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
-            self?.checkForUpdatesInBackground()
-        }
-
-        // Check every 30 minutes
-        checkTimer = Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.checkForUpdatesInBackground()
-            }
+            self?.checkInBackground()
         }
     }
 
-    /// Silent background check — just sets `updateAvailable` flag
-    func checkForUpdatesInBackground() {
+    // MARK: - SPUUpdaterDelegate
+
+    nonisolated func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        Task { @MainActor in
+            updateAvailable = true
+            latestVersionString = item.displayVersionString
+            print("[2relay] update available: \(item.displayVersionString ?? "unknown")")
+        }
+    }
+
+    nonisolated func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+        Task { @MainActor in
+            updateAvailable = false
+            print("[2relay] no update available")
+        }
+    }
+
+    // MARK: - Actions
+
+    /// Silent background check — sets `updateAvailable` if a new version exists
+    func checkInBackground() {
         guard let updaterController, canCheckForUpdates else { return }
-
-        let updater = updaterController.updater
-        updater.checkForUpdatesInBackground()
-
-        // Poll briefly to see if Sparkle found an update
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-            guard let self else { return }
-            // Sparkle doesn't expose a simple "update available" bool,
-            // so we check the last update check date changed
-            let lastCheck = updater.lastUpdateCheckDate
-            if lastCheck != nil {
-                // If Sparkle found an update it will show its own UI on next
-                // interactive check. We set the flag so Settings can show
-                // "Restart to Update" on the next manual check.
-                print("[2relay] background update check completed")
-            }
-        }
+        updaterController.updater.checkForUpdatesInBackground()
     }
 
-    /// Interactive check — shows Sparkle's download + install + restart UI
+    /// Interactive update — downloads, installs, and restarts
+    func installUpdate() {
+        guard let updaterController else { return }
+        guard canCheckForUpdates else { return }
+        updaterController.checkForUpdates(nil)
+    }
+
     func checkForUpdates() {
         guard let updaterController else {
             if let configurationErrorMessage {
@@ -152,12 +164,7 @@ final class UpdaterController: ObservableObject {
             }
             return
         }
-
-        guard canCheckForUpdates else {
-            print("[2relay] Sparkle updater is not ready to check for updates yet.")
-            return
-        }
-
+        guard canCheckForUpdates else { return }
         updaterController.checkForUpdates(nil)
     }
 }

@@ -42,6 +42,8 @@ struct MainView: View {
     let onOpenSettings: () -> Void
     let onOpenHelp: () -> Void
     let canCheckForUpdates: Bool
+    let updateAvailable: Bool
+    let latestVersionString: String?
     let updatesDisabledReason: String?
     let onCheckForUpdates: () -> Void
 
@@ -269,6 +271,8 @@ struct MainView: View {
                 state: state,
                 permissionCenter: permissionCenter,
                 canCheckForUpdates: canCheckForUpdates,
+                updateAvailable: updateAvailable,
+                latestVersionString: latestVersionString,
                 updatesDisabledReason: updatesDisabledReason,
                 onCheckForUpdates: onCheckForUpdates,
                 onClose: {

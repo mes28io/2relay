@@ -27,6 +27,8 @@ final class MainWindowController: NSObject, ObservableObject, NSWindowDelegate {
         onOpenSettings: @escaping () -> Void,
         onOpenHelp: @escaping () -> Void,
         canCheckForUpdates: Bool,
+        updateAvailable: Bool,
+        latestVersionString: String?,
         updatesDisabledReason: String?,
         onCheckForUpdates: @escaping () -> Void
     ) {
@@ -39,6 +41,8 @@ final class MainWindowController: NSObject, ObservableObject, NSWindowDelegate {
                 onOpenSettings: onOpenSettings,
                 onOpenHelp: onOpenHelp,
                 canCheckForUpdates: canCheckForUpdates,
+                updateAvailable: updateAvailable,
+                latestVersionString: latestVersionString,
                 updatesDisabledReason: updatesDisabledReason,
                 onCheckForUpdates: onCheckForUpdates
             )
@@ -52,6 +56,8 @@ final class MainWindowController: NSObject, ObservableObject, NSWindowDelegate {
                     onOpenSettings: onOpenSettings,
                     onOpenHelp: onOpenHelp,
                     canCheckForUpdates: canCheckForUpdates,
+                    updateAvailable: updateAvailable,
+                    latestVersionString: latestVersionString,
                     updatesDisabledReason: updatesDisabledReason,
                     onCheckForUpdates: onCheckForUpdates
                 )
@@ -102,6 +108,8 @@ final class MainWindowController: NSObject, ObservableObject, NSWindowDelegate {
         onOpenSettings: @escaping () -> Void,
         onOpenHelp: @escaping () -> Void,
         canCheckForUpdates: Bool,
+        updateAvailable: Bool,
+        latestVersionString: String?,
         updatesDisabledReason: String?,
         onCheckForUpdates: @escaping () -> Void
     ) -> NSWindow {
@@ -135,6 +143,8 @@ final class MainWindowController: NSObject, ObservableObject, NSWindowDelegate {
                 onOpenSettings: onOpenSettings,
                 onOpenHelp: onOpenHelp,
                 canCheckForUpdates: canCheckForUpdates,
+                updateAvailable: updateAvailable,
+                latestVersionString: latestVersionString,
                 updatesDisabledReason: updatesDisabledReason,
                 onCheckForUpdates: onCheckForUpdates
             )
@@ -156,6 +166,8 @@ final class MainWindowController: NSObject, ObservableObject, NSWindowDelegate {
         onOpenSettings: @escaping () -> Void,
         onOpenHelp: @escaping () -> Void,
         canCheckForUpdates: Bool,
+        updateAvailable: Bool,
+        latestVersionString: String?,
         updatesDisabledReason: String?,
         onCheckForUpdates: @escaping () -> Void
     ) -> some View {
@@ -168,6 +180,8 @@ final class MainWindowController: NSObject, ObservableObject, NSWindowDelegate {
             onOpenSettings: onOpenSettings,
             onOpenHelp: onOpenHelp,
             canCheckForUpdates: canCheckForUpdates,
+            updateAvailable: updateAvailable,
+            latestVersionString: latestVersionString,
             updatesDisabledReason: updatesDisabledReason,
             onCheckForUpdates: onCheckForUpdates
         )
