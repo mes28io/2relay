@@ -110,15 +110,16 @@ struct SettingsView: View {
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(secondaryTextColor)
                         Spacer()
-                        Button("Check for Updates") {
-                            onCheckForUpdates?()
+                        if canCheckForUpdates {
+                            Button("Restart to Update") {
+                                onCheckForUpdates?()
+                            }
+                            .font(.system(size: 12, weight: .semibold))
                         }
-                        .font(.system(size: 12, weight: .semibold))
-                        .disabled(!canCheckForUpdates || onCheckForUpdates == nil)
                     }
 
                     if canCheckForUpdates {
-                        Text("If a new version is available, it will be downloaded and installed automatically. The app will restart after the update.")
+                        Text("Click the button to check for updates. If a newer version is available, it will be downloaded and the app will restart automatically.")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(mainTextColor)
                     } else {
