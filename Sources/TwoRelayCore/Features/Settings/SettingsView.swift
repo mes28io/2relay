@@ -180,6 +180,17 @@ struct SettingsView: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(secondaryTextColor)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack {
+                Spacer()
+                Button("Restart Onboarding") {
+                    state.restartOnboarding()
+                    onClose?()
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(secondaryTextColor)
+                .buttonStyle(.plain)
+            }
         }
         .padding(16)
         .frame(width: 500)
