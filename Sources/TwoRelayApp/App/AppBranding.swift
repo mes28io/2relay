@@ -5,9 +5,20 @@ enum AppBranding {
     static let bundledLogoName = "2relay-logo"
 
     static func loadLogoImage() -> NSImage? {
+        // Try bundled logo first
         if let bundledURL = Bundle.main.url(forResource: bundledLogoName, withExtension: "png"),
            let bundledImage = NSImage(contentsOf: bundledURL) {
             return bundledImage
+        }
+
+        // Fall back to the app icon from the asset catalog
+        if let appIcon = NSImage(named: "AppIcon") {
+            return appIcon
+        }
+
+        // Fall back to the app's icon image
+        if let appIcon = NSApp?.applicationIconImage {
+            return appIcon
         }
 
         return nil
@@ -24,38 +35,18 @@ enum AppBranding {
         return copy
     }
 
-    static func loadDockWaveformImage() -> NSImage? {
-        guard let symbol = NSImage(
-            systemSymbolName: "waveform",
-            accessibilityDescription: "2relay"
-        ) else {
-            return nil
-        }
-
-        let config = NSImage.SymbolConfiguration(pointSize: 220, weight: .regular)
-        let image = symbol.withSymbolConfiguration(config) ?? symbol
-        image.isTemplate = false
-        return renderDockIconImage(from: image)
-    }
-
-    static func loadDockLogoImage() -> NSImage? {
-        guard let logo = loadLogoImage(),
-              let copy = logo.copy() as? NSImage else {
-            return nil
-        }
-
-        copy.isTemplate = false
-        return renderDockIconImage(from: copy)
-    }
-
     @MainActor
     static func applyDockIcon() {
-        guard let image = loadDockLogoImage() ?? loadDockWaveformImage() else {
+        guard let logo = loadLogoImage(),
+              let copy = logo.copy() as? NSImage else {
             return
         }
 
-        NSApp.applicationIconImage = image
-        NSApp.dockTile.contentView = makeDockTileContentView(with: image)
+        copy.isTemplate = false
+        guard let rendered = renderDockIconImage(from: copy) else { return }
+
+        NSApp.applicationIconImage = rendered
+        NSApp.dockTile.contentView = makeDockTileContentView(with: rendered)
         NSApp.dockTile.display()
     }
 
