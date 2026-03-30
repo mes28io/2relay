@@ -387,6 +387,96 @@ private final class FunctionKeyMonitor {
     }
 }
 
+/// Monitors AirPods stem double-press (Next Track media key) for hands-free toggle.
+private final class MediaKeyMonitor {
+    private let instanceID = UUID().uuidString.prefix(8)
+    private let onToggle: @MainActor () -> Void
+    private var eventTap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
+    private var isActive = false
+
+    init(onToggle: @escaping @MainActor () -> Void) {
+        self.onToggle = onToggle
+        print("[2relay] media key monitor init: \(instanceID)")
+    }
+
+    deinit {
+        print("[2relay] media key monitor deinit: \(instanceID)")
+        stop()
+    }
+
+    func start() {
+        guard !isActive else { return }
+
+        // NX_SYSDEFINED = 14 — system-defined events including media keys
+        let eventMask: CGEventMask = 1 << 14
+        let callback: CGEventTapCallBack = { _, _, event, userInfo in
+            guard let userInfo else { return Unmanaged.passRetained(event) }
+            let monitor = Unmanaged<MediaKeyMonitor>.fromOpaque(userInfo).takeUnretainedValue()
+            monitor.handleEvent(event)
+            return Unmanaged.passRetained(event)
+        }
+
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .listenOnly,
+            eventsOfInterest: eventMask,
+            callback: callback,
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        ) else {
+            print("[2relay] media key monitor: failed to create event tap (accessibility permission may be needed)")
+            return
+        }
+
+        eventTap = tap
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        runLoopSource = source
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+
+        isActive = true
+        print("[2relay] media key monitor enabled (\(instanceID))")
+    }
+
+    func stop() {
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+        }
+        if let source = runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
+        }
+        eventTap = nil
+        runLoopSource = nil
+
+        if isActive {
+            print("[2relay] media key monitor disabled (\(instanceID))")
+        }
+        isActive = false
+    }
+
+    private func handleEvent(_ event: CGEvent) {
+        // System-defined events (type 14) with subtype 8 are media/AUX key events
+        guard event.type.rawValue == 14 else { return }
+
+        let nsEvent = NSEvent(cgEvent: event)
+        guard let nsEvent, nsEvent.subtype.rawValue == 8 else { return }
+
+        let data1 = nsEvent.data1
+        let keyCode = (data1 & 0xFFFF0000) >> 16
+        let keyState = (data1 & 0xFF00) >> 8
+
+        // keyCode 17 = Next Track (AirPods double-press)
+        // keyState: 0x0A = key down, 0x0B = key up
+        guard keyCode == 17, keyState == 0x0A else { return }
+
+        print("[2relay] AirPods double-press detected (Next Track)")
+        Task { @MainActor in
+            onToggle()
+        }
+    }
+}
+
 // MARK: - HotkeyManager
 
 @MainActor
@@ -411,6 +501,9 @@ final class HotkeyManager: ObservableObject {
     private var toggleListening = false
     private var lastRegisteredShortcut: KeyboardShortcuts.Shortcut?
 
+    // AirPods: double-press stem = hands-free toggle
+    private var mediaKeyMonitor: MediaKeyMonitor!
+
     private var isRecorderActive = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -425,6 +518,13 @@ final class HotkeyManager: ObservableObject {
             },
             onKeyUp: { [weak self] in
                 self?.handleFnUp()
+            }
+        )
+
+        // AirPods double-press stem = hands-free toggle
+        mediaKeyMonitor = MediaKeyMonitor(
+            onToggle: { [weak self] in
+                self?.handleAirPodsToggle()
             }
         )
 
@@ -463,6 +563,9 @@ final class HotkeyManager: ObservableObject {
 
         // Always start Fn push-to-talk monitor
         functionKeyMonitor.start()
+
+        // Always start AirPods media key monitor
+        mediaKeyMonitor.start()
 
         // Register the hands-free toggle shortcut
         registerHandsFreeShortcut(reason: reason)
@@ -533,6 +636,20 @@ final class HotkeyManager: ObservableObject {
         fnKeyIsHeld = false
         print("[2relay] Fn up (push-to-talk)")
         appState.stopListening()
+    }
+
+    // MARK: - AirPods toggle (double-press stem)
+
+    private func handleAirPodsToggle() {
+        guard !isRecorderActive else { return }
+        print("[2relay] AirPods toggle (hands-free)")
+
+        if toggleListening {
+            appState.stopListening()
+        } else {
+            appState.startListening()
+        }
+        toggleListening.toggle()
     }
 
     // MARK: - Hands-free toggle (configurable shortcut)
@@ -642,6 +759,7 @@ final class HotkeyManager: ObservableObject {
             hotkeyMonitor.unregister()
             keyEventFallbackMonitor.stop()
             functionKeyMonitor.stop()
+            mediaKeyMonitor.stop()
         } else {
             registerAll(reason: .preferencesChange)
         }
