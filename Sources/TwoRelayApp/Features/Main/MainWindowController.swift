@@ -23,28 +23,20 @@ final class MainWindowController: NSObject, ObservableObject, NSWindowDelegate {
         state: AppState,
         permissionCenter: PermissionCenter,
         misspellingDictionary: MisspellingDictionary,
+        updaterController: UpdaterController,
         onRunWhisperTestFlow: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void,
-        onOpenHelp: @escaping () -> Void,
-        canCheckForUpdates: Bool,
-        updateAvailable: Bool,
-        latestVersionString: String?,
-        updatesDisabledReason: String?,
-        onCheckForUpdates: @escaping () -> Void
+        onOpenHelp: @escaping () -> Void
     ) {
         if window == nil {
             window = makeWindow(
                 state: state,
                 permissionCenter: permissionCenter,
                 misspellingDictionary: misspellingDictionary,
+                updaterController: updaterController,
                 onRunWhisperTestFlow: onRunWhisperTestFlow,
                 onOpenSettings: onOpenSettings,
-                onOpenHelp: onOpenHelp,
-                canCheckForUpdates: canCheckForUpdates,
-                updateAvailable: updateAvailable,
-                latestVersionString: latestVersionString,
-                updatesDisabledReason: updatesDisabledReason,
-                onCheckForUpdates: onCheckForUpdates
+                onOpenHelp: onOpenHelp
             )
         } else {
             window?.contentView = NSHostingView(
@@ -52,14 +44,10 @@ final class MainWindowController: NSObject, ObservableObject, NSWindowDelegate {
                     state: state,
                     permissionCenter: permissionCenter,
                     misspellingDictionary: misspellingDictionary,
+                    updaterController: updaterController,
                     onRunWhisperTestFlow: onRunWhisperTestFlow,
                     onOpenSettings: onOpenSettings,
-                    onOpenHelp: onOpenHelp,
-                    canCheckForUpdates: canCheckForUpdates,
-                    updateAvailable: updateAvailable,
-                    latestVersionString: latestVersionString,
-                    updatesDisabledReason: updatesDisabledReason,
-                    onCheckForUpdates: onCheckForUpdates
+                    onOpenHelp: onOpenHelp
                 )
             )
         }
@@ -104,14 +92,10 @@ final class MainWindowController: NSObject, ObservableObject, NSWindowDelegate {
         state: AppState,
         permissionCenter: PermissionCenter,
         misspellingDictionary: MisspellingDictionary,
+        updaterController: UpdaterController,
         onRunWhisperTestFlow: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void,
-        onOpenHelp: @escaping () -> Void,
-        canCheckForUpdates: Bool,
-        updateAvailable: Bool,
-        latestVersionString: String?,
-        updatesDisabledReason: String?,
-        onCheckForUpdates: @escaping () -> Void
+        onOpenHelp: @escaping () -> Void
     ) -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1100, height: 800),
@@ -139,14 +123,10 @@ final class MainWindowController: NSObject, ObservableObject, NSWindowDelegate {
                 state: state,
                 permissionCenter: permissionCenter,
                 misspellingDictionary: misspellingDictionary,
+                updaterController: updaterController,
                 onRunWhisperTestFlow: onRunWhisperTestFlow,
                 onOpenSettings: onOpenSettings,
-                onOpenHelp: onOpenHelp,
-                canCheckForUpdates: canCheckForUpdates,
-                updateAvailable: updateAvailable,
-                latestVersionString: latestVersionString,
-                updatesDisabledReason: updatesDisabledReason,
-                onCheckForUpdates: onCheckForUpdates
+                onOpenHelp: onOpenHelp
             )
         )
         attachSidebarToggleAccessory(to: window)
@@ -162,28 +142,20 @@ final class MainWindowController: NSObject, ObservableObject, NSWindowDelegate {
         state: AppState,
         permissionCenter: PermissionCenter,
         misspellingDictionary: MisspellingDictionary,
+        updaterController: UpdaterController,
         onRunWhisperTestFlow: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void,
-        onOpenHelp: @escaping () -> Void,
-        canCheckForUpdates: Bool,
-        updateAvailable: Bool,
-        latestVersionString: String?,
-        updatesDisabledReason: String?,
-        onCheckForUpdates: @escaping () -> Void
+        onOpenHelp: @escaping () -> Void
     ) -> some View {
         MainView(
             state: state,
             permissionCenter: permissionCenter,
             misspellingDictionary: misspellingDictionary,
             layoutState: layoutState,
+            updaterController: updaterController,
             onRunWhisperTestFlow: onRunWhisperTestFlow,
             onOpenSettings: onOpenSettings,
-            onOpenHelp: onOpenHelp,
-            canCheckForUpdates: canCheckForUpdates,
-            updateAvailable: updateAvailable,
-            latestVersionString: latestVersionString,
-            updatesDisabledReason: updatesDisabledReason,
-            onCheckForUpdates: onCheckForUpdates
+            onOpenHelp: onOpenHelp
         )
     }
 

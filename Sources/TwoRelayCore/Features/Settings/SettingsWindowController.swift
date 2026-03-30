@@ -7,18 +7,21 @@ final class SettingsWindowController: ObservableObject {
 
     func present(
         state: AppState,
-        permissionCenter: PermissionCenter
+        permissionCenter: PermissionCenter,
+        updaterController: UpdaterController
     ) {
         if window == nil {
             window = makeWindow(
                 state: state,
-                permissionCenter: permissionCenter
+                permissionCenter: permissionCenter,
+                updaterController: updaterController
             )
         } else {
             window?.contentView = NSHostingView(
                 rootView: SettingsView(
                     state: state,
-                    permissionCenter: permissionCenter
+                    permissionCenter: permissionCenter,
+                    updaterController: updaterController
                 )
                     .frame(width: 760, height: 560)
                     .padding(20)
@@ -37,7 +40,8 @@ final class SettingsWindowController: ObservableObject {
 
     private func makeWindow(
         state: AppState,
-        permissionCenter: PermissionCenter
+        permissionCenter: PermissionCenter,
+        updaterController: UpdaterController
     ) -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 560),
@@ -50,7 +54,8 @@ final class SettingsWindowController: ObservableObject {
         window.contentView = NSHostingView(
             rootView: SettingsView(
                 state: state,
-                permissionCenter: permissionCenter
+                permissionCenter: permissionCenter,
+                updaterController: updaterController
             )
                 .frame(width: 760, height: 560)
                 .padding(20)

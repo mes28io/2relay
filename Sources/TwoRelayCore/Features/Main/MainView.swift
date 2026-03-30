@@ -38,14 +38,11 @@ struct MainView: View {
     @ObservedObject var misspellingDictionary: MisspellingDictionary
     @ObservedObject var layoutState: MainLayoutState
 
+    @ObservedObject var updaterController: UpdaterController
+
     let onRunWhisperTestFlow: () -> Void
     let onOpenSettings: () -> Void
     let onOpenHelp: () -> Void
-    let canCheckForUpdates: Bool
-    let updateAvailable: Bool
-    let latestVersionString: String?
-    let updatesDisabledReason: String?
-    let onCheckForUpdates: () -> Void
 
     @State private var selectedTab: SidebarTab = .home
     @State private var hoveredSidebarItemID: String?
@@ -270,11 +267,7 @@ struct MainView: View {
             SettingsView(
                 state: state,
                 permissionCenter: permissionCenter,
-                canCheckForUpdates: canCheckForUpdates,
-                updateAvailable: updateAvailable,
-                latestVersionString: latestVersionString,
-                updatesDisabledReason: updatesDisabledReason,
-                onCheckForUpdates: onCheckForUpdates,
+                updaterController: updaterController,
                 onClose: {
                     closeSettingsPanel()
                 }
@@ -348,20 +341,21 @@ struct MainView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Button("Check for Updates...") {
-                    onCheckForUpdates()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .font(.system(size: 11, weight: .semibold))
-                .disabled(!canCheckForUpdates)
-
-                if !canCheckForUpdates {
-                    Text("Updates are not available in this build yet.")
-                        .font(.system(size: 10, weight: .regular))
-                        .foregroundStyle(secondaryTextColor)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 280, alignment: .leading)
+                if updaterController.updateAvailable, let version = updaterController.latestVersionString {
+                    Button("Download \(version)") {
+                        updaterController.openDownload()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .font(.system(size: 11, weight: .semibold))
+                } else {
+                    Button("Check for Updates...") {
+                        Task { await updaterController.checkForUpdates() }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .font(.system(size: 11, weight: .semibold))
+                    .disabled(updaterController.isChecking)
                 }
             }
             .padding(.leading, 22)

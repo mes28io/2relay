@@ -4,11 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var state: AppState
     @ObservedObject var permissionCenter: PermissionCenter
-    var canCheckForUpdates: Bool = false
-    var updateAvailable: Bool = false
-    var latestVersionString: String? = nil
-    var updatesDisabledReason: String? = nil
-    var onCheckForUpdates: (() -> Void)? = nil
+    @ObservedObject var updaterController: UpdaterController
     var onClose: (() -> Void)? = nil
 
     @State private var licenseInput = ""
@@ -112,30 +108,31 @@ struct SettingsView: View {
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(secondaryTextColor)
                         Spacer()
-                        if updateAvailable {
-                            Button("Update & Restart") {
-                                onCheckForUpdates?()
+                        if updaterController.updateAvailable {
+                            Button("Download Update") {
+                                updaterController.openDownload()
                             }
                             .font(.system(size: 12, weight: .semibold))
                             .buttonStyle(.borderedProminent)
-                        } else if canCheckForUpdates {
-                            Button("Check for Updates") {
-                                onCheckForUpdates?()
+                        } else {
+                            Button(updaterController.isChecking ? "Checking..." : "Check for Updates") {
+                                Task { await updaterController.checkForUpdates() }
                             }
                             .font(.system(size: 12, weight: .semibold))
+                            .disabled(updaterController.isChecking)
                         }
                     }
 
-                    if updateAvailable, let version = latestVersionString {
-                        Text("Version \(version) is available. Click Update & Restart to install.")
+                    if updaterController.updateAvailable, let version = updaterController.latestVersionString {
+                        Text("Version \(version) is available.")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(mainTextColor)
-                    } else if canCheckForUpdates {
-                        Text("You're on the latest version.")
+                    } else if updaterController.isChecking {
+                        Text("Checking for updates...")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(mainTextColor)
                     } else {
-                        Text(updatesDisabledReason ?? "Updates are not available in this build.")
+                        Text("You're on the latest version.")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(mainTextColor)
                     }

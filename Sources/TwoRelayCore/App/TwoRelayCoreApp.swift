@@ -44,16 +44,6 @@ public struct TwoRelayCoreScene: Scene {
         let updaterController = UpdaterController()
         _updaterController = StateObject(wrappedValue: updaterController)
         RuntimeRetainer.updaterController = updaterController
-        let updateCheckAction = {
-            if updaterController.canCheckForUpdates {
-                updaterController.checkForUpdates()
-            } else {
-                state.reportStatus(
-                    updaterController.configurationErrorMessage ?? "Updates are currently unavailable.",
-                    level: .warning
-                )
-            }
-        }
 
         let targetDispatcher = TargetDispatcher(permissionCenter: permissionCenter)
         let whisperEngine = WhisperEngine(modelPath: state.modelPath)
@@ -105,6 +95,7 @@ public struct TwoRelayCoreScene: Scene {
                     state: state,
                     permissionCenter: permissionCenter,
                     misspellingDictionary: misspellingDictionary,
+                    updaterController: updaterController,
                     onRunWhisperTestFlow: {
                         whisperTestFlowCoordinator.runRecordThreeSecondsThenTranslateToEnglish()
                     },
@@ -114,78 +105,53 @@ public struct TwoRelayCoreScene: Scene {
                     },
                     onOpenHelp: {
                         Self.openHelpProfile()
-                    },
-                    canCheckForUpdates: updaterController.canCheckForUpdates,
-                    updateAvailable: updaterController.updateAvailable,
-                    latestVersionString: updaterController.latestVersionString,
-                    updatesDisabledReason: updaterController.configurationErrorMessage,
-                    onCheckForUpdates: updateCheckAction
+                    }
                 )
             }
         }
     }
 
+    private func presentMainWindow() {
+        mainWindowController.present(
+            state: state,
+            permissionCenter: permissionCenter,
+            misspellingDictionary: misspellingDictionary,
+            updaterController: updaterController,
+            onRunWhisperTestFlow: {
+                whisperTestFlowCoordinator.runRecordThreeSecondsThenTranslateToEnglish()
+            },
+            onOpenSettings: {
+                permissionCenter.refreshFromSystemAndRedirectUnrecognizedIfNeeded()
+                state.isSettingsPanelPresented = true
+            },
+            onOpenHelp: {
+                Self.openHelpProfile()
+            }
+        )
+    }
+
     public var body: some Scene {
-        // Ensure side-effect coordinators are initialized for hotkey and overlay behavior.
         let _ = hotkeyManager
         let _ = overlayController
 
         MenuBarExtra("2relay", systemImage: "waveform") {
             MenuBarView(
                 state: state,
-                canCheckForUpdates: updaterController.canCheckForUpdates,
+                canCheckForUpdates: true,
                 onOpenMain: {
-                    mainWindowController.present(
-                        state: state,
-                        permissionCenter: permissionCenter,
-                        misspellingDictionary: misspellingDictionary,
-                        onRunWhisperTestFlow: {
-                            whisperTestFlowCoordinator.runRecordThreeSecondsThenTranslateToEnglish()
-                        },
-                        onOpenSettings: {
-                            permissionCenter.refreshFromSystemAndRedirectUnrecognizedIfNeeded()
-                            state.isSettingsPanelPresented = true
-                        },
-                        onOpenHelp: {
-                            Self.openHelpProfile()
-                        },
-                        canCheckForUpdates: updaterController.canCheckForUpdates,
-                        updateAvailable: updaterController.updateAvailable,
-                        latestVersionString: updaterController.latestVersionString,
-                        updatesDisabledReason: updaterController.configurationErrorMessage,
-                        onCheckForUpdates: {
-                            handleCheckForUpdates()
-                        }
-                    )
+                    presentMainWindow()
                 },
                 onCheckForUpdates: {
-                    handleCheckForUpdates()
+                    if updaterController.updateAvailable {
+                        updaterController.openDownload()
+                    } else {
+                        Task { await updaterController.checkForUpdates() }
+                    }
                 },
                 onOpenSettings: {
                     permissionCenter.refreshFromSystemAndRedirectUnrecognizedIfNeeded()
                     state.isSettingsPanelPresented = true
-                    mainWindowController.present(
-                        state: state,
-                        permissionCenter: permissionCenter,
-                        misspellingDictionary: misspellingDictionary,
-                        onRunWhisperTestFlow: {
-                            whisperTestFlowCoordinator.runRecordThreeSecondsThenTranslateToEnglish()
-                        },
-                        onOpenSettings: {
-                            permissionCenter.refreshFromSystemAndRedirectUnrecognizedIfNeeded()
-                            state.isSettingsPanelPresented = true
-                        },
-                        onOpenHelp: {
-                            Self.openHelpProfile()
-                        },
-                        canCheckForUpdates: updaterController.canCheckForUpdates,
-                        updateAvailable: updaterController.updateAvailable,
-                        latestVersionString: updaterController.latestVersionString,
-                        updatesDisabledReason: updaterController.configurationErrorMessage,
-                        onCheckForUpdates: {
-                            handleCheckForUpdates()
-                        }
-                    )
+                    presentMainWindow()
                 }
             )
         }
@@ -200,16 +166,6 @@ public struct TwoRelayCoreScene: Scene {
         NSWorkspace.shared.open(url)
     }
 
-    private func handleCheckForUpdates() {
-        if updaterController.canCheckForUpdates {
-            updaterController.checkForUpdates()
-        } else {
-            state.reportStatus(
-                updaterController.configurationErrorMessage ?? "Updates are currently unavailable.",
-                level: .warning
-            )
-        }
-    }
 }
 
 public struct TwoRelayCoreApp: App {
