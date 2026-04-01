@@ -46,7 +46,7 @@ final class UpdaterController: ObservableObject {
                 if interactive {
                     showAlert(
                         title: "Update Check Failed",
-                        message: "Could not reach the update server. Please check your internet connection and try again."
+                        message: "Server returned HTTP \(statusCode). Please check your internet connection and try again."
                     )
                 }
                 return
@@ -120,7 +120,7 @@ final class UpdaterController: ObservableObject {
             if interactive {
                 showAlert(
                     title: "Update Check Failed",
-                    message: "Could not check for updates. Please check your internet connection and try again."
+                    message: "\(error.localizedDescription)"
                 )
             }
         }
