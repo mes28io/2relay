@@ -658,6 +658,12 @@ final class HotkeyManager: ObservableObject {
         guard !isRecorderActive, !toggleKeyIsHeld else { return }
         toggleKeyIsHeld = true
         print("[2relay] toggle key down (hands-free)")
+
+        // Cancel any in-progress Fn push-to-talk so Fn up won't stop listening
+        if fnKeyIsHeld {
+            fnKeyIsHeld = false
+            print("[2relay] Fn push-to-talk cancelled (hands-free shortcut takes priority)")
+        }
     }
 
     private func handleToggleUp() {
@@ -676,16 +682,14 @@ final class HotkeyManager: ObservableObject {
     // MARK: - Key release safety
 
     private func releaseAllHeldKeys() {
-        if fnKeyIsHeld {
-            fnKeyIsHeld = false
+        fnKeyIsHeld = false
+        toggleKeyIsHeld = false
+        if toggleListening || appState.isListening {
+            toggleListening = false
             if appState.isListening {
                 appState.stopListening()
             }
         }
-        if toggleKeyIsHeld {
-            toggleKeyIsHeld = false
-        }
-        toggleListening = false
     }
 
     // MARK: - Bindings
