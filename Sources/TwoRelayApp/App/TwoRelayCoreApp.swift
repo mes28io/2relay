@@ -142,11 +142,7 @@ public struct TwoRelayCoreScene: Scene {
                     presentMainWindow()
                 },
                 onCheckForUpdates: {
-                    if updaterController.updateAvailable {
-                        updaterController.openDownload()
-                    } else {
-                        Task { await updaterController.checkForUpdates() }
-                    }
+                    Task { await updaterController.checkForUpdates(interactive: true) }
                 },
                 onOpenSettings: {
                     permissionCenter.refreshFromSystemAndRedirectUnrecognizedIfNeeded()

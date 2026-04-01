@@ -9,6 +9,7 @@ final class UpdaterController: ObservableObject {
     @Published private(set) var downloadURL: URL?
     @Published private(set) var configurationErrorMessage: String?
     @Published private(set) var isChecking = false
+    @Published private(set) var lastCheckFailed = false
 
     private let repo = "mes28io/2relay"
     private var currentVersion: String
@@ -19,13 +20,14 @@ final class UpdaterController: ObservableObject {
         // Check on launch after a short delay
         Task {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
-            await checkForUpdates()
+            await checkForUpdates(interactive: false)
         }
     }
 
-    func checkForUpdates() async {
+    func checkForUpdates(interactive: Bool = true) async {
         guard !isChecking else { return }
         isChecking = true
+        lastCheckFailed = false
 
         do {
             let url = URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!
@@ -37,13 +39,30 @@ final class UpdaterController: ObservableObject {
 
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                print("[2relay] update check failed: HTTP \(statusCode)")
+                lastCheckFailed = true
                 isChecking = false
+                if interactive {
+                    showAlert(
+                        title: "Update Check Failed",
+                        message: "Could not reach the update server. Please check your internet connection and try again."
+                    )
+                }
                 return
             }
 
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let tagName = json["tag_name"] as? String else {
+                print("[2relay] update check failed: unexpected response format")
+                lastCheckFailed = true
                 isChecking = false
+                if interactive {
+                    showAlert(
+                        title: "Update Check Failed",
+                        message: "Received an unexpected response from the update server."
+                    )
+                }
                 return
             }
 
@@ -82,12 +101,28 @@ final class UpdaterController: ObservableObject {
                 }
 
                 print("[2relay] update available: \(latestVersion) (current: \(currentVersion))")
+                if interactive {
+                    showUpdateAvailableAlert(version: latestVersion)
+                }
             } else {
                 updateAvailable = false
                 print("[2relay] up to date: \(currentVersion)")
+                if interactive {
+                    showAlert(
+                        title: "You're Up to Date",
+                        message: "2relay \(currentVersion) is the latest version."
+                    )
+                }
             }
         } catch {
             print("[2relay] update check failed: \(error.localizedDescription)")
+            lastCheckFailed = true
+            if interactive {
+                showAlert(
+                    title: "Update Check Failed",
+                    message: "Could not check for updates. Please check your internet connection and try again."
+                )
+            }
         }
 
         isChecking = false
@@ -109,5 +144,28 @@ final class UpdaterController: ObservableObject {
             if r < l { return false }
         }
         return false
+    }
+
+    private func showUpdateAvailableAlert(version: String) {
+        let alert = NSAlert()
+        alert.messageText = "Update Available"
+        alert.informativeText = "2relay \(version) is available. You are currently running \(currentVersion)."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Download")
+        alert.addButton(withTitle: "Later")
+
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            openDownload()
+        }
+    }
+
+    private func showAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 }

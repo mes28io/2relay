@@ -116,7 +116,7 @@ struct SettingsView: View {
                             .buttonStyle(.borderedProminent)
                         } else {
                             Button(updaterController.isChecking ? "Checking..." : "Check for Updates") {
-                                Task { await updaterController.checkForUpdates() }
+                                Task { await updaterController.checkForUpdates(interactive: false) }
                             }
                             .font(.system(size: 12, weight: .semibold))
                             .disabled(updaterController.isChecking)
@@ -131,6 +131,10 @@ struct SettingsView: View {
                         Text("Checking for updates...")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(mainTextColor)
+                    } else if updaterController.lastCheckFailed {
+                        Text("Update check failed. Try again.")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.red)
                     } else {
                         Text("You're on the latest version.")
                             .font(.system(size: 13, weight: .medium))
