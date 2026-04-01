@@ -136,4 +136,4 @@ fi
 
 echo
 echo "done."
-echo "shortcuts: Fn (push-to-talk) / Fn+Space (hands-free toggle)"
+echo "shortcuts: Fn (push-to-talk) / Shift+Option+Space (hands-free toggle)"

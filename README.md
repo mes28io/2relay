@@ -10,7 +10,7 @@ Voice-to-prompt relay for macOS. Speak naturally in any language, get clean Engl
 | **Release Fn** | Recording stops, Whisper transcribes locally |
 | **Auto-paste** | Clean prompt is pasted into your focused app |
 
-There's also a **hands-free mode** (Fn+Space by default) — press once to start, press again to stop. Customizable in Settings > Shortcuts.
+There's also a **hands-free mode** (Shift+Option+Space by default) — press once to start, press again to stop. Customizable in Settings > Shortcuts.
 
 ## Features
 
@@ -18,7 +18,7 @@ There's also a **hands-free mode** (Fn+Space by default) — press once to start
 - **Any language in, English out** — speak in your native language, get English prompts
 - **Paste anywhere** — auto-pastes into your editor, terminal, browser, or any focused app
 - **Auto-cleanup** — removes fillers, stutters, and repetitions
-- **Dual shortcuts** — Fn (push-to-talk) + Fn+Space (hands-free toggle)
+- **Dual shortcuts** — Fn (push-to-talk) + Shift+Option+Space (hands-free toggle)
 - **Menu bar app** — lives in your menu bar, no dock clutter
 
 ## Install
