@@ -8,10 +8,8 @@ enum RelayHotkeyDefaults {
     static let systemInputSourceControlSpaceID = 60
     static let systemInputSourceControlOptionSpaceID = 61
 
-    /// Default hands-free shortcut: Fn+Space
-    static let handsFreeFnSpace = KeyboardShortcuts.Shortcut(.space, modifiers: [.function])
-
-    static let preferred = KeyboardShortcuts.Shortcut(.space, modifiers: [.control])
+    /// Default hands-free shortcut: Shift+Option+Space
+    static let preferred = KeyboardShortcuts.Shortcut(.space, modifiers: [.shift, .option])
     static let fallbackControlOption = KeyboardShortcuts.Shortcut(.space, modifiers: [.control, .option])
     static let fallbackControlShift = KeyboardShortcuts.Shortcut(.space, modifiers: [.control, .shift])
     static let fallbackCommandOption = KeyboardShortcuts.Shortcut(.space, modifiers: [.command, .option])
@@ -19,7 +17,6 @@ enum RelayHotkeyDefaults {
 
     static var fallbackCandidates: [KeyboardShortcuts.Shortcut] {
         [
-            handsFreeFnSpace,
             fallbackControlOption,
             fallbackControlShift,
             fallbackCommandOption,
@@ -29,10 +26,10 @@ enum RelayHotkeyDefaults {
 }
 
 extension KeyboardShortcuts.Name {
-    /// Hands-free toggle shortcut (default: Fn+Space)
+    /// Hands-free toggle shortcut (default: Shift+Option+Space)
     static let relayListen = Self(
         "relayListen",
-        default: RelayHotkeyDefaults.handsFreeFnSpace
+        default: RelayHotkeyDefaults.preferred
     )
 }
 
@@ -494,7 +491,7 @@ final class HotkeyManager: ObservableObject {
     private var functionKeyMonitor: FunctionKeyMonitor!
     private var fnKeyIsHeld = false
 
-    // Hands-free toggle: configurable shortcut (default Fn+Space)
+    // Hands-free toggle: configurable shortcut (default Shift+Option+Space)
     private var hotkeyMonitor: CarbonHotkeyMonitor!
     private var keyEventFallbackMonitor: KeyEventFallbackMonitor!
     private var toggleKeyIsHeld = false
@@ -572,8 +569,15 @@ final class HotkeyManager: ObservableObject {
     }
 
     private func registerHandsFreeShortcut(reason: RegistrationReason) {
-        let selectedShortcut = KeyboardShortcuts.getShortcut(for: .relayListen)
-            ?? RelayHotkeyDefaults.handsFreeFnSpace
+        var selectedShortcut = KeyboardShortcuts.getShortcut(for: .relayListen)
+            ?? RelayHotkeyDefaults.preferred
+
+        // Migrate away from the old Fn+Space default which conflicts with Fn push-to-talk
+        if selectedShortcut.modifiers == [.function] {
+            selectedShortcut = RelayHotkeyDefaults.preferred
+            KeyboardShortcuts.setShortcut(selectedShortcut, for: .relayListen)
+            print("[2relay] migrated hands-free shortcut from Fn+Space to \(selectedShortcut.description)")
+        }
 
         if KeyboardShortcuts.getShortcut(for: .relayListen) == nil {
             KeyboardShortcuts.setShortcut(selectedShortcut, for: .relayListen)

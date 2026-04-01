@@ -148,7 +148,7 @@ final class AppState: ObservableObject {
     }
 
     var activeHotkeyDisplayText: String {
-        let handsFree = KeyboardShortcuts.getShortcut(for: .relayListen)?.description ?? "Fn+Space"
+        let handsFree = KeyboardShortcuts.getShortcut(for: .relayListen)?.description ?? "Shift+Option+Space"
         return "Fn (hold) / \(handsFree) (toggle)"
     }
 

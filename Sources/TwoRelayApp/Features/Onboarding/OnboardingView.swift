@@ -291,7 +291,7 @@ struct OnboardingView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(secondaryTextColor)
 
-                Text("Press once to start, press again to stop. Default: Fn+Space.")
+                Text("Press once to start, press again to stop. Default: Shift+Option+Space.")
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(mainTextColor)
 
@@ -300,7 +300,7 @@ struct OnboardingView: View {
                     .foregroundStyle(secondaryTextColor)
 
                 HotkeyRecorderField(name: .relayListen) { shortcut in
-                    hotkeyPreview = shortcut?.description ?? "Fn+Space"
+                    hotkeyPreview = shortcut?.description ?? "Shift+Option+Space"
                     state.reportStatus("Hands-free shortcut updated: \(hotkeyPreview)", level: .success)
                 }
                 .frame(height: 30)
@@ -650,7 +650,7 @@ struct OnboardingView: View {
     }
 
     private var isUsingDefaultHotkey: Bool {
-        KeyboardShortcuts.getShortcut(for: .relayListen) == RelayHotkeyDefaults.handsFreeFnSpace
+        KeyboardShortcuts.getShortcut(for: .relayListen) == RelayHotkeyDefaults.preferred
     }
 
     private var accentColor: Color {

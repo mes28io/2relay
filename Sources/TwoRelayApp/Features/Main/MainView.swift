@@ -669,7 +669,7 @@ struct MainView: View {
                     Text("Current:")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(secondaryTextColor)
-                    Text(KeyboardShortcuts.getShortcut(for: .relayListen)?.description ?? "Fn+Space")
+                    Text(KeyboardShortcuts.getShortcut(for: .relayListen)?.description ?? "Shift+Option+Space")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(mainTextColor)
                 }
